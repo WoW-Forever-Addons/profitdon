@@ -136,17 +136,45 @@ local function SubClasses(c)
   return r
 end
 
+-- (Daniel 20.11.2026: "juwelier kann raus wir sind bei wow forever") categories WoW Forever does not have: Jewelcrafting
+-- (recipes 9/10, trade goods 7/4), by the filters (every language) and by the name
+local DROP = { ["9:10"] = true, ["7:4"] = true }
+local DROP_NAME = { "jewelcraft", "juwelier", "joaill", "joyer", "joalh", "ювелир" }
+local function Dropped(src)
+  local f = type(src.filters) == "table" and src.filters or {}
+  local n, hit = 0, 0
+  for _, x in ipairs(f) do
+    if type(x) == "table" then
+      n = n + 1
+      if DROP[tostring(x.classID) .. ":" .. tostring(x.subClassID)] then hit = hit + 1 end
+    end
+  end
+  if n > 0 and hit == n then return true end
+  local name = type(src.name) == "string" and src.name:lower() or ""
+  for _, w in ipairs(DROP_NAME) do if name:find(w, 1, true) then return true end end
+  return false
+end
+ns.AHDropped = Dropped -- (tests)
+
 local function FromGame(ac)
   local out = {}
   for i, c in ipairs(ac) do
     local token = type(c.flags) == "table" and c.flags.WOW_TOKEN_FLAG
     if type(c) == "table" and type(c.name) == "string" and not token then
       local cat = { key = "g" .. i, name = c.name, filters = type(c.filters) == "table" and c.filters or {}, subs = {} }
-      for j, s in ipairs(type(c.subCategories) == "table" and c.subCategories or {}) do
-        if type(s) == "table" and type(s.name) == "string" then
-          cat.subs[#cat.subs + 1] = { key = cat.key .. "_" .. j, name = s.name, filters = type(s.filters) == "table" and s.filters or {}, parent = cat }
+      -- (Daniel 20.11.2026, Bild: "keine stäbe oder so?") Blizzard's table has a third level (One-Handed: Axes, Maces,
+      -- Swords ...; Two-Handed: Staves ...): read as deep as it goes
+      local function Subs(node, src, depth)
+        for j, s in ipairs(type(src.subCategories) == "table" and src.subCategories or {}) do
+          if type(s) == "table" and type(s.name) == "string" and not Dropped(s) then
+            local sub = { key = node.key .. "_" .. j, name = s.name, filters = type(s.filters) == "table" and s.filters or {}, parent = node,
+              subs = {}, depth = depth }
+            if depth < 3 then Subs(sub, s, depth + 1) end
+            node.subs[#node.subs + 1] = sub
+          end
         end
       end
+      Subs(cat, c, 1)
       out[#out + 1] = cat
     end
   end
@@ -162,7 +190,7 @@ local function FromClasses()
       for _, s in ipairs(SubClasses(c)) do
         s = tonumber(s)
         local sn = s and SubName(c, s)
-        if type(sn) == "string" and sn ~= "" then
+        if type(sn) == "string" and sn ~= "" and not Dropped({ name = sn, filters = { { classID = c, subClassID = s } } }) then
           cat.subs[#cat.subs + 1] = { key = cat.key .. "_" .. s, name = sn, filters = { { classID = c, subClassID = s } }, parent = cat }
         end
       end
@@ -209,8 +237,10 @@ local QUALS = {
 }
 -- the flags that make sense on a Classic based client (UncollectedOnly and UpgradesOnly do not)
 local FLAGS = {
-  { key = "usable", enum = "UsableOnly", label = "Nur benutzbar",
-    tip = { "Nur benutzbar", { "Nur Gegenstände, die dieser Charakter benutzen oder anlegen kann." } } },
+  -- (Daniel 20.11.2026, Bild: "nur benutzbar armor kommt nichts, level 10 mage") the server's UsableOnly answers nothing on
+  -- Forever: checked here (wearable by the class and the required level reached)
+  { key = "usable", client = true, label = "Nur benutzbar",
+    tip = { "Nur benutzbar", { "Nur, was deine Klasse tragen kann und deine Stufe schon erlaubt." } } },
   { key = "exact", enum = "ExactMatch", label = "Genauer Name",
     tip = { "Genauer Name", { "Nur Gegenstände, deren Name genau dem Suchtext entspricht." } } },
   -- (Daniel 20.11.2026: "Filter kann ich tragen ... je nach Klasse und Rüstungsart, dass er dann nur das angezeigt bekommt,
@@ -218,7 +248,69 @@ local FLAGS = {
   { key = "wear", client = true, label = "Kann ich tragen",
     tip = { "Kann ich tragen", { "Nur Rüstung und Waffen, die deine Klasse tragen kann (Stoff, Leder, Kette, Platte, Schilde, Waffenarten).",
       "Alles andere (Mats, Verbrauchbares, Schmuck) bleibt sichtbar." } } },
+  -- (Daniel 20.11.2026, Bild Rezepte: "einen Filter, dass nur Unbekannte angezeigt werden. Also für den Charakter
+  -- Unbekannte") recipes this character already knows are hidden (ns.AHRecipeKnown); other items stay
+  { key = "unknown", client = true, label = "Nur unbekannte Rezepte",
+    tip = { "Nur unbekannte Rezepte", { "Blendet Rezepte aus, die dieser Charakter schon kann.",
+      "Alles, was kein Rezept ist, bleibt sichtbar." } } },
 }
+
+-- does this character know the recipe item id already? true / false; nil when it is no recipe or cannot be told.
+-- First the recipes Profitdon recorded for this character (ns.LEARN: spell -> recipe item), then the item's tooltip
+-- ("Bereits bekannt", ITEM_SPELL_KNOWN), cached once the tooltip had text.
+local recipeSpells, knownTip = nil, {}
+local function RecipeSpells()
+  if recipeSpells then return recipeSpells end
+  recipeSpells = {}
+  for spell, d in pairs(ns.LEARN or {}) do
+    local item = type(d) == "table" and tonumber(d[3])
+    if item and item > 0 then
+      local l = recipeSpells[item] or {}
+      l[#l + 1] = spell
+      recipeSpells[item] = l
+    end
+  end
+  return recipeSpells
+end
+local scanTip
+local function TipKnown(id)
+  if knownTip[id] ~= nil then return knownTip[id] end
+  local word = rawget(_G, "ITEM_SPELL_KNOWN")
+  if type(word) ~= "string" or not CreateFrame then return nil end
+  if not scanTip then
+    local ok, t = pcall(CreateFrame, "GameTooltip", "ProfitdonScanTip", nil, "GameTooltipTemplate")
+    if not (ok and t) then return nil end
+    scanTip = t
+  end
+  scanTip:SetOwner(WorldFrame or UIParent, "ANCHOR_NONE")
+  scanTip:ClearLines()
+  if not pcall(scanTip.SetItemByID, scanTip, id) then return nil end
+  local n = scanTip.NumLines and scanTip:NumLines() or 0
+  if n == 0 then return nil end
+  local hit = false
+  for i = 2, n do
+    local fs = _G["ProfitdonScanTipTextLeft" .. i]
+    local s = fs and fs.GetText and fs:GetText()
+    if s == word then hit = true break end
+  end
+  knownTip[id] = hit
+  scanTip:Hide()
+  return hit
+end
+function ns.AHRecipeKnown(id)
+  id = tonumber(id)
+  if not id then return nil end
+  local get = (C_Item and C_Item.GetItemInfoInstant) or rawget(_G, "GetItemInfoInstant")
+  local classID = type(get) == "function" and ns.Num((select(6, ns.Call(get, id))))
+  if classID ~= 9 then return nil end
+  local c = type(ns.db and ns.db.crafts) == "table" and ns.db.crafts[ns.Me()]
+  local known = type(c) == "table" and type(c.known) == "table" and c.known
+  if known then
+    for _, spell in ipairs(RecipeSpells()[id] or {}) do if known[spell] then return true end end
+  end
+  return TipKnown(id) or false
+end
+function ns.AHRecipeKnownReset() recipeSpells, knownTip = nil, {} end -- (tests)
 
 -- armour and weapon subclasses each class can use (Dropdon/Filter.lua CLASS_USE, Classic proficiencies; where unsure
 -- allowed). Armour: 0 misc, 1 cloth, 2 leather, 3 mail, 4 plate, 6 shield, 7 libram, 8 idol, 9 totem. Weapons: 0 axe,
@@ -328,9 +420,28 @@ local function FilterSig()
   return table.concat(list, ",") .. "|" .. tostring(lo or 0) .. "|" .. tostring(hi or 0)
 end
 
+-- (Daniel 20.11.2026, Bilder: "Die Auflistung unten kriege ich gar nicht mehr weg. Wenn ich irgendwo wegklicke, dann soll
+-- das auch weggehen", "selbst wenn ich eine andere Kategorie auswähle, dann bleibt das da") the picked item let go: its
+-- offers, the price tiers and the buy area empty again (only Buy.lua's own entry of this page)
+function ns.AHUnpick()
+  A.sel = nil
+  local B = ns.BuyState
+  if B and B.kind == "ah" then
+    B.entry, B.plan, B.ladder, B.itemOffers, B.maxQty, B.msg, B.armed = nil, nil, nil, nil, nil, nil, nil
+    B.state = "idle"
+  end
+end
+
+-- start over (the x in the search box): no text, Alle Kategorien, no results, nothing picked; the filters stay
+function ns.AHReset()
+  ns.AHUnpick()
+  A.text, A.cat, A.results, A.state, A.msg, A.full, A.hidden = "", nil, {}, nil, nil, nil, 0
+end
+
 -- the browse query of the search text and the chosen category; waits while the AH's message system is busy
 function ns.AHSearch()
-  A.sel = nil
+  knownTip = {} -- (a recipe learned since the last search shows as known)
+  ns.AHUnpick()
   if not ns.ScanState.open then A.msg = "Dafür das Auktionshaus öffnen." return false end
   if not ns.AH.SendBrowseQuery then A.msg = "Suche geht in diesem Client nicht." return false end
   local ready = ns.AH.IsThrottledMessageSystemReady
@@ -417,6 +528,7 @@ end
 -- the cheapest of the results first unless a column head was clicked
 local SORTERS = {
   title = function(a, b) return (a.name or "") < (b.name or "") end,
+  lvl = function(a, b) return (a.lvl or 0) < (b.lvl or 0) end,
   qty = function(a, b) return (a.qty or 0) > (b.qty or 0) end,
   price = function(a, b) return (a.min or math.huge) < (b.min or math.huge) end,
   med = function(a, b) return (a.med or math.huge) < (b.med or math.huge) end,
@@ -489,16 +601,23 @@ end
 local function CatItems()
   local cats = ns.AHCategories()
   local out = {}
-  out[#out + 1] = { kind = "sub", title = "Alle Kategorien", status = A.cat == nil and "current" or nil, cat = false }
+  out[#out + 1] = { kind = "cat", title = "Alle Kategorien", current = A.cat == nil or nil, cat = false, depth = 0 }
   for _, c in ipairs(cats) do
     local open = A.open[c.key] and true or false
     out[#out + 1] = { kind = "group", text = c.name, plainCase = true, collapsed = not open, static = #c.subs == 0 or nil, cat = c,
       color = A.cat == c and C.green or nil }
-    if open then
-      for _, s in ipairs(c.subs) do
-        out[#out + 1] = { kind = "sub", title = s.name, cat = s, status = A.cat == s and "current" or nil }
+    -- (Daniel 20.11.2026, Bild: "kästchen sind nur da und machen nichts") the sub rows are plain text rows (kind "cat"),
+    -- not Questdon's chain steps with their box; a sub with own subs opens with + and -
+    local function Add(list, depth)
+      for _, s in ipairs(list) do
+        local has = s.subs and #s.subs > 0
+        local sopen = has and A.open[s.key] and true or false
+        out[#out + 1] = { kind = "cat", title = s.name, cat = s, depth = depth, sign = has and (sopen and "-" or "+") or nil,
+          current = A.cat == s or nil }
+        if sopen then Add(s.subs, depth + 1) end
       end
     end
+    if open then Add(c.subs, 1) end
   end
   return out
 end
@@ -507,13 +626,20 @@ local function ResultItems()
   local H = ns.History
   local B = ns.BuyState
   local items = {}
-  local wear = ns.AHFilter().wear
+  local f = ns.AHFilter()
+  local wear, usable = f.wear, f.usable
+  local myLevel = ns.Num(ns.Call(UnitLevel, "player"))
+  local GI = (C_Item and C_Item.GetItemInfo) or rawget(_G, "GetItemInfo")
   A.hidden = 0
   for _, r in ipairs(A.results or {}) do
-    if wear and not ns.AHWearable(r.id) then A.hidden = A.hidden + 1 r = nil end
+    -- the required level (GetItemInfo's fifth value; ns.ItemInfo's fourth is the icon)
+    r.lvl = ns.Num((select(5, ns.Call(GI, r.id))))
+    if (wear or usable) and not ns.AHWearable(r.id) then A.hidden = A.hidden + 1 r = nil
+    elseif usable and r.lvl and myLevel and r.lvl > myLevel then A.hidden = A.hidden + 1 r = nil
+    elseif f.unknown and ns.AHRecipeKnown(r.id) then A.hidden = A.hidden + 1 r = nil end
     if r then
     local info = KeyInfo(r.itemKey)
-    local name, _, quality, level = ns.ItemInfo(r.id)
+    local name, _, quality = ns.ItemInfo(r.id)
     r.name = (info and info.itemName) or name or ("Item " .. r.id)
     r.quality = (info and ns.Num(info.quality)) or quality
     r.med = H and H.Median(r.id)
@@ -521,11 +647,10 @@ local function ResultItems()
     if H then tt, col, dir, pct = H.TrendText(r.id) end
     r.pct = pct
     local sub = {}
-    if level and level > 1 then sub[#sub + 1] = "Stufe " .. level end
     if r.own then sub[#sub + 1] = "mit eigenem Angebot" end
     if info and info.isCommodity == false then sub[#sub + 1] = "Einzelauktionen" end
     items[#items + 1] = { kind = "trow", title = r.name, quality = r.quality, itemID = r.id, icon = ns.Icon(r.id), sub = table.concat(sub, ", "),
-      cells = { qty = r.qty and tostring(r.qty) or "", price = M(r.min), med = M(r.med), trend = tt },
+      cells = { lvl = r.lvl and r.lvl > 0 and tostring(r.lvl) or "", qty = r.qty and tostring(r.qty) or "", price = M(r.min), med = M(r.med), trend = tt },
       cellColors = { trend = TrendColor(dir) },
       active = (A.sel == r and B.kind == "ah") or nil, result = r }
     end
@@ -548,6 +673,7 @@ local function Cols()
   local n = ns.History and ns.History.Window() or 5
   return {
     { key = "title", title = "Gegenstand", sort = true },
+    { key = "lvl", title = "Stufe", width = 50, sort = true },
     { key = "qty", title = "Anzahl", width = 64, sort = true },
     { key = "price", title = "Preis ab", width = 96, sort = true },
     { key = "med", title = ("Median %d T"):format(n), width = 96, sort = true, minWidth = 470, fold = "Median" },
@@ -634,18 +760,45 @@ function ns.AHPage(parent, UI)
   local B = ns.BuyState
   -- left: categories
   p.cats = UI.List(p, {
+    kinds = { cat = { h = 22, make = function()
+      local b = CreateFrame("Button", nil, p)
+      b:SetHeight(22)
+      b.hl = b:CreateTexture(nil, "BACKGROUND")
+      b.hl:SetAllPoints()
+      if b.hl.SetColorTexture then b.hl:SetColorTexture(1, 1, 1, 0.08) end
+      b.hl:Hide()
+      b.text = UI.Text(b, "row", C.body)
+      b:SetScript("OnEnter", function(self) self.hl:Show() end)
+      b:SetScript("OnLeave", function(self) if not (self.item and self.item.current) then self.hl:Hide() end end)
+      function b:SetItem(it)
+        self.item = it
+        self.text:ClearAllPoints()
+        self.text:SetPoint("LEFT", self, "LEFT", 12 + (it.depth or 0) * 14, 0)
+        self.text:SetText((it.sign and (it.sign .. " ") or "") .. (it.title or ""))
+        local c = it.current and C.green or (it.depth or 0) == 0 and C.body or C.muted
+        if c and self.text.SetTextColor then self.text:SetTextColor(c[1], c[2], c[3]) end
+        if it.current then self.hl:Show() else self.hl:Hide() end
+      end
+      function b:Layout() end
+      return b
+    end } },
     onClick = function(it) p:PickCat(it) end,
     onToggle = function(it) p:PickCat(it, true) end })
   function p:PickCat(it, toggled)
     if not it or it.cat == nil then return end
     local c = it.cat or nil
     if toggled and c then A.open[c.key] = not it.collapsed end
+    -- a sub with own subs: a click opens or shuts them and searches it
+    if not toggled and c and it.kind == "cat" and c.subs and #c.subs > 0 then A.open[c.key] = not A.open[c.key] or nil end
     A.cat = c
     ns.AHSearch()
     self:Fill()
   end
   -- top: search
-  p.text = UI.EditBox(p, { placeholder = "Suchen (Name)...", maxLetters = 60,
+  -- (Daniel 20.11.2026, Bild: "ein X in dem Schreibfeld, dass man da alles direkt löschen kann ... dann soll er oben auf
+  -- alle Kategorien gehen und dann das Suchfeld leer") the x empties the box and starts over: Alle Kategorien, no results
+  p.text = UI.EditBox(p, { placeholder = "Suchen (Name)...", maxLetters = 60, clear = true,
+    onClear = function() ns.AHReset() p:Fill() end,
     onChange = function(t) A.text = t end,
     onEnter = function() ns.AHSearch() p:Fill() end })
   p.go = UI.Button(p, "Suchen", { small = true, onClick = function() A.text = p.text:GetText() or A.text ns.AHSearch() p:Fill() end,
@@ -747,10 +900,25 @@ function ns.AHPage(parent, UI)
         ns.SetWant(B.maxQty, false)
         p:Fill()
       end
-    end, tooltip = "Max", tooltipLines = { "So viel, wie Gold und Höchstbetrag je Klick kaufen (billigste zuerst)." } })
+    end, tooltip = "Max", tooltipLines = { "So viel, wie das Gold kauft (billigste zuerst); ab der Bestätigungsgrenze kommt ein zweiter Klick mit dem Gesamtpreis." } })
   p.go2 = UI.Button(p.buy, "Kaufen", { kind = "primary", onClick = function() ns.BuyNow() p:Fill() end,
     tooltip = "Kaufen", tooltipLines = { "Kauft die Menge zu den billigsten Angeboten.", "Stapelware: ein Klick, das Spiel bestätigt den Preis vorher.",
       "Einzelauktionen: eine Auktion je Klick.", "Tastenkürzel \"Profitdon: nächster Klick\" geht auch." } })
+
+  -- a click anywhere outside the results, the price tiers and the buy area lets the picked item go
+  local watch = CreateFrame("Frame", nil, p)
+  if pcall(watch.RegisterEvent, watch, "GLOBAL_MOUSE_DOWN") then
+    watch:SetScript("OnEvent", function()
+      local B = ns.BuyState
+      if not (p:IsVisible() and B and B.kind == "ah" and B.entry) then return end
+      for _, f in ipairs({ p.results, p.tiers, p.buy }) do
+        if f and f:IsVisible() and f.IsMouseOver and f:IsMouseOver() then return end
+      end
+      ns.AHUnpick()
+      p:Fill()
+    end)
+  end
+  p.unpickWatch = watch -- (tests)
 
   function p:Fill()
     local open = ns.ScanState.open
@@ -776,7 +944,7 @@ function ns.AHPage(parent, UI)
     -- results
     self.resultItems = ResultItems()
     if (A.hidden or 0) > 0 and A.state == "done" then
-      self.count:SetText(count .. (", %d nicht tragbar ausgeblendet"):format(A.hidden))
+      self.count:SetText(count .. (", %d durch Filter ausgeblendet"):format(A.hidden))
     end
     self.results:SetColumns(Cols())
     if self.results.SetSort then self.results:SetSort(A.sort, not A.desc) end

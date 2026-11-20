@@ -1,4 +1,4 @@
-local Bz = LibStub("DonCore-1.0"):NewModule("Blizz", 9)
+local Bz = LibStub("DonCore-1.0"):NewModule("Blizz", 10)
 if not Bz then return end
 
 ---------------------------------------------------------------------------
@@ -39,7 +39,7 @@ local K = setmetatable({}, { __index = Kit or {} })
 Bz.kit = K
 Bz.K = K -- (Profitdon's name for the kit)
 K.blizzLook = true -- a caller can tell the two kits apart
-Bz.VERSION = 9
+Bz.VERSION = 10
 Bz.ROW_H = 24 -- the row height of Bz.List without opts.rowHeight (Profitdon's craft and sell lists)
 if Bz.light == nil then Bz.light = true end
 
@@ -511,8 +511,32 @@ function K.EditBox(parent, opts)
   e.hint:SetPoint("LEFT", 2, 0)
   if e.hint.SetWordWrap then e.hint:SetWordWrap(false) end
   e.hint:SetText(opts.placeholder or "")
+  -- (minor 10) opts.clear as in the Kit: a small x at the right while there is text; opts.onClear after it emptied the box
+  if opts.clear then
+    e.clear = CreateFrame("Button", nil, e)
+    e.clear:SetSize(14, 14)
+    e.clear:SetPoint("RIGHT", -3, 0)
+    local t = e.clear:CreateTexture(nil, "ARTWORK")
+    t:SetAllPoints()
+    t:SetTexture("Interface\\FriendsFrame\\ClearBroadcastIcon")
+    t:SetAlpha(0.6)
+    e.clear.tex = t
+    e.clear:SetScript("OnEnter", function(self) self.tex:SetAlpha(1) end)
+    e.clear:SetScript("OnLeave", function(self) self.tex:SetAlpha(0.6) end)
+    e.clear:Hide()
+    if e.SetTextInsets then e:SetTextInsets(0, 18, 0, 0) end
+  end
   local function Hint(self)
     if (self:GetText() or "") == "" and (opts.placeholder or "") ~= "" and not self._focus then self.hint:Show() else self.hint:Hide() end
+    if self.clear then if (self:GetText() or "") == "" then self.clear:Hide() else self.clear:Show() end end
+  end
+  if e.clear then
+    e.clear:SetScript("OnClick", function()
+      e:SetValue(nil)
+      e:ClearFocus()
+      if opts.onChange then Try(opts.onChange, "", e) end
+      if opts.onClear then Try(opts.onClear, e) end
+    end)
   end
   function e:SetValue(v)
     self._setting = true

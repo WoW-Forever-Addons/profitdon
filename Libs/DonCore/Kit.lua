@@ -1,4 +1,4 @@
-local Kit = LibStub("DonCore-1.0"):NewModule("Kit", 31)
+local Kit = LibStub("DonCore-1.0"):NewModule("Kit", 32)
 
 ---------------------------------------------------------------------------
 -- DonCore module "Kit" (minor 1, 01.11.2026, STYLEKIT_PLAN.md "Schritt 2"; minor 2, 02.11.2026: Kit.IconButton, the symbols from
@@ -82,7 +82,7 @@ local Kit = LibStub("DonCore-1.0"):NewModule("Kit", 31)
 ---------------------------------------------------------------------------
 if not Kit then return end -- the same or a newer Kit is loaded already
 local Core = LibStub("DonCore-1.0")
-Kit.VERSION = 31
+Kit.VERSION = 32
 
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 local floor, ceil, max, min, abs, pi, sin, cos = math.floor, math.ceil, math.max, math.min, math.abs, math.pi, math.sin, math.cos
@@ -3356,7 +3356,8 @@ function Kit.EditBox(parent, opts)
     if self.clear then if t == "" then self.clear:Hide() else self.clear:Show() end end
     if user then Safe("edit", opts.onChange, t, self) end
   end
-  if e.clear then e.clear:SetScript("OnClick", function() e:SetText("") e:ClearFocus() Changed(e, true) end) end
+  -- (minor 32) opts.onClear: called after the x emptied the box
+  if e.clear then e.clear:SetScript("OnClick", function() e:SetText("") e:ClearFocus() Changed(e, true) if opts.onClear then Safe("edit", opts.onClear, e) end end) end
   function e:GetValue()
     local t = self:GetText() or ""
     if opts.numeric then

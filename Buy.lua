@@ -156,6 +156,9 @@ end
 local function Spend()
   local money = ns.Num(ns.Call(GetMoney))
   local cap = ns.Opt("maxSpend")
+  -- (Daniel 20.11.2026, Bild Flask: "10 habe ich eingegeben, aber 2 kann ich nur kaufen") the page Kaufen buys the amount
+  -- typed, only the gold limits it (from confirmAbove a second click with the total); the cap stays for the rest
+  if B.kind == "ah" then cap = math.huge end
   if money and money < cap then return money, true end
   return cap, false
 end

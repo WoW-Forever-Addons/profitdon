@@ -1,5 +1,12 @@
 # Profitdon
 
+## 0.2.1
+- Kaufen: Spalte Stufe, Kategorien bis zur dritten Ebene (z. B. Stäbe), Nur benutzbar prüft Klasse und Stufe,
+  ohne Juwelierskunst, neuer Filter Nur unbekannte Rezepte.
+- Kaufen: die eingegebene Menge wird gekauft, die Grenze je Kaufklick gilt dort nicht mehr (Bestätigung mit Gesamtpreis bleibt).
+- Kaufen: Klick daneben, neue Suche oder andere Kategorie schließen die Angebotsliste.
+- Kaufen: x im Suchfeld leert es und springt zurück auf Alle Kategorien.
+
 ## 0.2.0
 - Erste Version auf CurseForge (ungelistet, nur über den Link).
 - Einkaufsliste als eigener Reiter, eigene Listen mit Namen (Vorrat halten oder feste Menge je Eintrag, Rechtsklick
