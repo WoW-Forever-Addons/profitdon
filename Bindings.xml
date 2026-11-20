@@ -1,0 +1,5 @@
+<Bindings>
+	<Binding name="PROFITDON_NEXT" header="PROFITDON">
+		Profitdon_Next()
+	</Binding>
+</Bindings>

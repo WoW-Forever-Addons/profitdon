@@ -1,0 +1,186 @@
+local _, ns = ...
+
+---------------------------------------------------------------------------
+-- Merchant's Favor (08.11.2026, Daniel: "die merchant favor kisten, die droppen random und können im ah gekauft werden";
+-- chosen: gold per Favor, crates to buy, Favor measured in the game)
+--   a Waylaid Crate (G.crates in Data/Vendor.lua, ForeverDB: crate, level, bundles that fill it) filled with one bundle becomes
+--   a sealed crate (Data/Favor.lua, ATT), handed in for Merchant's Favor: ATT's quest reward, or what Profitdon measured
+--   (ProfitdonDB.favorSeen[sealed] = { turn-ins, Favor }), the measurement wins
+--   per crate: the crate in the AH (ns.AHPrice) plus the cheapest bundle (each mat at its unit price as for crafting:
+--   vendor, own craft or AH), divided by the Favor: gold per Favor; the best crate gives the gold value of one Favor, which
+--   Skillen uses for recipes at the Favor vendors
+--   measuring: a sealed crate leaves the bags and the currency 3402 rises within 5 s (either order)
+---------------------------------------------------------------------------
+local F = {}
+ns.Favor = F
+local SEALED_LO, SEALED_HI = 248765, 248779   -- every sealed crate item (ATT: rare and elite ones without a known source)
+
+local function Data() return ns.FAVOR or { sealed = {}, gain = {} } end
+
+-- Favor of a crate: measured average or ATT, and where it comes from ("gemessen", "ATT"); nil when unknown
+function F.Gain(crate)
+  local sealed = Data().sealed[crate] or crate
+  local seen = type(ns.db.favorSeen) == "table" and ns.db.favorSeen[sealed]
+  if type(seen) == "table" and (seen[1] or 0) > 0 then return math.floor(seen[2] / seen[1] + 0.5), "gemessen" end
+  local g = Data().gain[sealed]
+  if g then return g, "ATT" end
+end
+
+function F.Held()
+  local c = C_CurrencyInfo and ns.Call(C_CurrencyInfo.GetCurrencyInfo, Data().currency or 3402)
+  return type(c) == "table" and ns.Num(c.quantity) or nil
+end
+
+-- the cheapest bundle of a crate: cost, item, count, where the mats come from
+function F.Bundle(bundles)
+  local best
+  for i = 1, #bundles, 2 do
+    local unit, src = ns.Crafts.ReagentUnit(bundles[i])
+    if unit then
+      local cost = unit * bundles[i + 1]
+      if not best or cost < best[1] then best = { cost, bundles[i], bundles[i + 1], src } end
+    end
+  end
+  if best then return best[1], best[2], best[3], best[4] end
+end
+
+-- one entry per crate: { id, level, crate (AH), crateSrc, bundle (cost), bid, bn, bsrc, total, gain, gainSrc, per,
+-- maxUnit (buying: 125 % of the AH price, at least 2c more) }; cheapest Favor first, crates without a price or Favor last
+function F.Rows()
+  local out = {}
+  local Cr = ns.Crafts
+  local outer = Cr.cache   -- Skillen asks inside its own cached pass: keep that cache
+  Cr.cache = outer or {}
+  local ok, err = pcall(function()
+    for _, c in ipairs(ns.G and ns.G.crates or {}) do
+      local e = { id = c[1], level = c[2] }
+      e.crate, e.crateSrc = ns.AHPrice(c[1])
+      e.bundle, e.bid, e.bn, e.bsrc = F.Bundle(c[3] or {})
+      e.gain, e.gainSrc = F.Gain(c[1])
+      if e.crate and e.bundle then e.total = e.crate + e.bundle end
+      if e.total and e.gain and e.gain > 0 then e.per = e.total / e.gain end
+      if e.crate then e.maxUnit = math.max(e.crate + 2, math.floor(e.crate * 1.25)) end
+      out[#out + 1] = e
+    end
+  end)
+  Cr.cache = outer
+  if not ok then error(err, 0) end
+  table.sort(out, function(a, b)
+    if (a.per == nil) ~= (b.per == nil) then return a.per ~= nil end
+    if a.per and a.per ~= b.per then return a.per < b.per end
+    if (a.bundle == nil) ~= (b.bundle == nil) then return a.bundle ~= nil end
+    return a.id < b.id
+  end)
+  return out
+end
+
+---------------------------------------------------------------------------
+-- (Daniel 13.11.2026: "wäre es hier nicht sinnvoll auch auf die einkaufsliste zu packen? also einmal die crate dann die mats
+-- dazu, entweder fertige mats oder zum herstellen, je nachdem was günstiger ist") a crate on the shopping list: a recipe
+-- of its own for Crafts.ShoppingList, the sealed crate made of the Waylaid Crate and its cheapest bundle (that bundle's
+-- item comes made or bought, whichever is cheaper, as every mat of the list). ProfitdonDB.favorPlan = { { crate, n } }
+---------------------------------------------------------------------------
+local function FavorPlan()
+  ns.db.favorPlan = type(ns.db.favorPlan) == "table" and ns.db.favorPlan or {}
+  return ns.db.favorPlan
+end
+function F.InPlan(crate)
+  for i, p in ipairs(FavorPlan()) do if p[1] == crate then return p, i end end
+end
+function F.Add(crate, n)
+  n = math.max(1, math.floor(tonumber(n) or 1))
+  local p = F.InPlan(crate)
+  if p then p[2] = n else table.insert(FavorPlan(), { crate, n }) end
+end
+function F.Remove(crate)
+  local _, i = F.InPlan(crate)
+  if i then table.remove(FavorPlan(), i) end
+end
+-- the recipe of a crate: spell "favor:<crate>", item the sealed crate, reagents the crate and its cheapest bundle
+function F.Recipe(crate)
+  for _, c in ipairs(ns.G and ns.G.crates or {}) do
+    if c[1] == crate then
+      local _, bid, bn = F.Bundle(c[3] or {})
+      if not bid and c[3] and c[3][1] then bid, bn = c[3][1], c[3][2] end
+      local reag = { { crate, 1 } }
+      if bid then reag[2] = { bid, bn } end
+      return { spell = "favor:" .. crate, item = Data().sealed[crate] or crate, reag = reag, count = 1, favor = crate }
+    end
+  end
+end
+-- the entries for Crafts.ShoppingList: { r, runs, favor }
+function F.PlanEntries()
+  local out = {}
+  for _, p in ipairs(FavorPlan()) do
+    local r = F.Recipe(p[1])
+    if r then out[#out + 1] = { r = r, runs = p[2], favor = p[1] } end
+  end
+  return out
+end
+
+-- gold for one Favor: the cheapest crate with an AH price, nil without one
+local memo
+function F.GoldPerFavor()
+  local t = GetTime()
+  if memo and t - memo.t < 5 then return memo.v, memo.best end
+  local best
+  for _, e in ipairs(F.Rows()) do if e.per and (not best or e.per < best.per) then best = e end end
+  memo = { t = t, v = best and math.floor(best.per + 0.5) or nil, best = best }
+  return memo.v, memo.best
+end
+function F.Forget() memo = nil end
+
+---------------------------------------------------------------------------
+-- Measuring the Favor of a turn-in
+---------------------------------------------------------------------------
+local held, lost, gained = nil, {}, nil
+
+local function Count()
+  local t = {}
+  for id = SEALED_LO, SEALED_HI do
+    local n = ns.BagCount and ns.BagCount(id) or 0
+    if n > 0 then t[id] = n end
+  end
+  return t
+end
+
+local function Match()
+  if not gained or #lost == 0 then return end
+  local now = GetTime()
+  for i, l in ipairs(lost) do
+    if math.abs(l.t - gained.t) <= 5 then
+      ns.db.favorSeen = type(ns.db.favorSeen) == "table" and ns.db.favorSeen or {}
+      local s = ns.db.favorSeen[l.id] or { 0, 0 }
+      s[1], s[2] = s[1] + 1, s[2] + gained.n
+      ns.db.favorSeen[l.id] = s
+      ns.Fact("favorLast", ("%d Gunst für %d"):format(gained.n, l.id))
+      table.remove(lost, i)
+      gained = nil
+      return
+    end
+  end
+  if now - gained.t > 5 then gained = nil end
+end
+
+function F.OnBags()
+  local now = Count()
+  if held then
+    for id, n in pairs(held) do
+      if (now[id] or 0) < n then lost[#lost + 1] = { id = id, t = GetTime() } end
+    end
+  end
+  held = now
+  while lost[1] and GetTime() - lost[1].t > 10 do table.remove(lost, 1) end
+  Match()
+end
+
+function F.OnCurrency(id, change)
+  if ns.Num(id) ~= (Data().currency or 3402) or (ns.Num(change) or 0) <= 0 then return end
+  gained = { n = ns.Num(change), t = GetTime() }
+  Match()
+  if gained then ns.After(1, function() ns.Try(F.OnBags) end) end
+end
+
+ns.On("PLAYER_LOGIN", function() ns.After(5, function() held = Count() end) end)
+ns.On("BAG_UPDATE_DELAYED", function() ns.Try(F.OnBags) end)
+ns.On("CURRENCY_DISPLAY_UPDATE", function(_, id, _, change) ns.Try(F.OnCurrency, id, change) end)

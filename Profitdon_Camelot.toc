@@ -1,0 +1,49 @@
+## Interface: 16001
+## Title: |cff4fd16bProfit|rdon
+## Notes: Lean gold helper for WoW Forever: craft for the vendor, disenchant for mats, auctions below the vendor price, sell mats at the cheapest offer.
+## Notes-deDE: Schlanker Goldhelfer für WoW Forever: Herstellen für den Händler, Entzaubern, Auktionen unter Händlerpreis, Mats zum billigsten Angebot verkaufen.
+## Author: DonCoohd
+## Version: 0.2.0
+## IconTexture: Interface\AddOns\Profitdon\Media\minimap
+## SavedVariables: ProfitdonDB
+## X-Curse-Project-ID: 1818383
+## X-License: Code MIT License, Copyright (c) 2026 DonCoohd. Data/Vendor.lua: ForeverDB.net (https://foreverdb.net) and CMaNGOS classic-db, GPL v3. Data/Recipes.lua: All The Things (MIT), CMaNGOS classic-db and ForeverDB.net (GPL v3). Data/Disenchant.lua: CMaNGOS classic-db, GPL v3. Data/Learn.lua: CMaNGOS classic-db and ForeverDB.net, GPL v3, All The Things (MIT). Data/Favor.lua and Data/Writs.lua: All The Things (MIT). Libs/LibStub: public domain.
+
+Libs\LibStub\LibStub.lua
+Libs\DonCore\DonCore.lua
+Libs\DonCore\Style.lua
+Libs\DonCore\MinimapButton.lua
+Libs\DonCore\Kit.lua
+Libs\DonCore\Options.lua
+Libs\DonCore\Blizz.lua
+Core.lua
+MinimapButton.lua
+Data\Vendor.lua
+Data\Recipes.lua
+Data\Disenchant.lua
+Data\Learn.lua
+Data\Favor.lua
+Data\Writs.lua
+Data\PriceSeed.lua
+Deals.lua
+Prices.lua
+Market.lua
+History.lua
+Disenchant.lua
+Scan.lua
+Buy.lua
+Post.lua
+SellPage.lua
+AHPage.lua
+Crafts.lua
+Skill.lua
+Favor.lua
+Writs.lua
+ShopLists.lua
+Merchant.lua
+Report.lua
+RecipeLog.lua
+Ledger.lua
+Tooltip.lua
+Window.lua
+CraftWin.lua
