@@ -1,5 +1,10 @@
 # Profitdon
 
+## 0.2.3
+- Rechtsklick auf eine Zeile (Berufe, Herstellen und andere Listen): "Im AH suchen" sucht den Gegenstand im Reiter Kaufen,
+  "Rezept im AH suchen" das Rezept dazu.
+- Kaufen: neue Spalte Skill, die Fertigkeitsstufe, die ein Rezept verlangt.
+
 ## 0.2.2
 - Kaufen und Einkaufsliste: "Gekauft: Anzahl für Preis" bleibt stehen, bis das Auktionshaus schließt (Summe je Gegenstand).
 - Kaufen: bei Einzelposten zählt das Mengenfeld mit jedem Kauf herunter; Knopf und Vorschau sagen klar "nur 1 Stück je Klick".

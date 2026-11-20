@@ -312,6 +312,54 @@ function ns.AHRecipeKnown(id)
 end
 function ns.AHRecipeKnownReset() recipeSpells, knownTip = nil, {} end -- (tests)
 
+-- (Daniel 20.11.2026: "bei Rezepten fehlt mir noch die Fertigkeitsstufe als Spalte") the skill a recipe item asks for:
+-- the recipe Profitdon knows for it (ns.LEARN, Crafts), else the item's tooltip ("Requires Cooking (175)",
+-- ITEM_MIN_SKILL), cached once the tooltip had text. nil when it is no recipe or cannot be told.
+local skillTip, skillPat = {}, nil
+local function TipSkill(id)
+  if skillTip[id] ~= nil then return skillTip[id] or nil end
+  local word = rawget(_G, "ITEM_MIN_SKILL")
+  if type(word) ~= "string" or not CreateFrame then return nil end
+  if not skillPat then
+    skillPat = "^" .. word:gsub("[%(%)%.%+%-%*%?%[%]%^%$]", "%%%0"):gsub("%%%d?%$?s", ".+"):gsub("%%%d?%$?d", "(%%d+)") .. "$"
+  end
+  if not scanTip then
+    local ok, t = pcall(CreateFrame, "GameTooltip", "ProfitdonScanTip", nil, "GameTooltipTemplate")
+    if not (ok and t) then return nil end
+    scanTip = t
+  end
+  scanTip:SetOwner(WorldFrame or UIParent, "ANCHOR_NONE")
+  scanTip:ClearLines()
+  if not pcall(scanTip.SetItemByID, scanTip, id) then return nil end
+  local n = scanTip.NumLines and scanTip:NumLines() or 0
+  if n == 0 then return nil end
+  local hit = false
+  for i = 2, n do
+    local fs = _G["ProfitdonScanTipTextLeft" .. i]
+    local t = fs and fs.GetText and fs:GetText()
+    local v = type(t) == "string" and tonumber(t:match(skillPat))
+    if v then hit = v break end
+  end
+  skillTip[id] = hit
+  scanTip:Hide()
+  return hit or nil
+end
+function ns.AHRecipeSkill(id)
+  id = tonumber(id)
+  if not id then return nil end
+  local get = (C_Item and C_Item.GetItemInfoInstant) or rawget(_G, "GetItemInfoInstant")
+  local classID = type(get) == "function" and ns.Num((select(6, ns.Call(get, id))))
+  if classID ~= 9 then return nil end
+  local best
+  for _, spell in ipairs(RecipeSpells()[id] or {}) do
+    local r = ns.Crafts and ns.Crafts.Recipe(spell)
+    local v = r and tonumber(r.learn)
+    if v and v > 0 and (not best or v < best) then best = v end
+  end
+  return best or TipSkill(id)
+end
+function ns.AHRecipeSkillReset() skillTip, skillPat = {}, nil end -- (tests)
+
 -- armour and weapon subclasses each class can use (Dropdon/Filter.lua CLASS_USE, Classic proficiencies; where unsure
 -- allowed). Armour: 0 misc, 1 cloth, 2 leather, 3 mail, 4 plate, 6 shield, 7 libram, 8 idol, 9 totem. Weapons: 0 axe,
 -- 1 2H axe, 2 bow, 3 gun, 4 mace, 5 2H mace, 6 polearm, 7 sword, 8 2H sword, 10 staff, 13 fist, 15 dagger, 16 thrown,
@@ -471,6 +519,20 @@ function ns.AHSearch()
   return true
 end
 
+-- (Daniel 20.11.2026: "den Gegenstand direkt im AH suchen, um vielleicht das Rezept zu sehen") from another list: the
+-- name searched in Kaufen, in Alle Kategorien (a recipe's name holds the name of what it makes: both show)
+function ns.AHFind(text)
+  if type(text) ~= "string" or text == "" then return false end
+  A.cat = nil
+  if ns.SetTab then ns.SetTab("ah") end
+  local p = ns.ahPage
+  if p and p.text and p.text.SetText then p.text:SetText(text) end
+  A.text = text
+  local sent = ns.AHSearch()
+  if ns.Refresh then ns.Refresh() end
+  return sent
+end
+
 -- a filter changed: searched again at once when there was a search and its filters differ (Enter and the focus lost
 -- of a level box both land here; the sign keeps it to one query)
 function ns.AHFilterApply()
@@ -529,6 +591,7 @@ end
 local SORTERS = {
   title = function(a, b) return (a.name or "") < (b.name or "") end,
   lvl = function(a, b) return (a.lvl or 0) < (b.lvl or 0) end,
+  skill = function(a, b) return (a.skill or 0) < (b.skill or 0) end,
   qty = function(a, b) return (a.qty or 0) > (b.qty or 0) end,
   price = function(a, b) return (a.min or math.huge) < (b.min or math.huge) end,
   med = function(a, b) return (a.med or math.huge) < (b.med or math.huge) end,
@@ -634,6 +697,7 @@ local function ResultItems()
   for _, r in ipairs(A.results or {}) do
     -- the required level (GetItemInfo's fifth value; ns.ItemInfo's fourth is the icon)
     r.lvl = ns.Num((select(5, ns.Call(GI, r.id))))
+    r.skill = ns.AHRecipeSkill(r.id)
     if (wear or usable) and not ns.AHWearable(r.id) then A.hidden = A.hidden + 1 r = nil
     elseif usable and r.lvl and myLevel and r.lvl > myLevel then A.hidden = A.hidden + 1 r = nil
     elseif f.unknown and ns.AHRecipeKnown(r.id) then A.hidden = A.hidden + 1 r = nil end
@@ -650,7 +714,7 @@ local function ResultItems()
     if r.own then sub[#sub + 1] = "mit eigenem Angebot" end
     if info and info.isCommodity == false then sub[#sub + 1] = "Einzelauktionen" end
     items[#items + 1] = { kind = "trow", title = r.name, quality = r.quality, itemID = r.id, icon = ns.Icon(r.id), sub = table.concat(sub, ", "),
-      cells = { lvl = r.lvl and r.lvl > 0 and tostring(r.lvl) or "", qty = r.qty and tostring(r.qty) or "", price = M(r.min), med = M(r.med), trend = tt },
+      cells = { lvl = r.lvl and r.lvl > 0 and tostring(r.lvl) or "", skill = r.skill and tostring(r.skill) or "", qty = r.qty and tostring(r.qty) or "", price = M(r.min), med = M(r.med), trend = tt },
       cellColors = { trend = TrendColor(dir) },
       active = (A.sel == r and B.kind == "ah") or nil, result = r }
     end
@@ -674,6 +738,7 @@ local function Cols()
   return {
     { key = "title", title = "Gegenstand", sort = true },
     { key = "lvl", title = "Stufe", width = 50, sort = true },
+    { key = "skill", title = "Skill", width = 50, sort = true, minWidth = 520, fold = "Skill" },
     { key = "qty", title = "Anzahl", width = 64, sort = true },
     { key = "price", title = "Preis ab", width = 96, sort = true },
     { key = "med", title = ("Median %d T"):format(n), width = 96, sort = true, minWidth = 470, fold = "Median" },
@@ -925,6 +990,7 @@ function ns.AHPage(parent, UI)
   end
   p.unpickWatch = watch -- (tests)
 
+  ns.ahPage = p
   function p:Fill()
     local open = ns.ScanState.open
     -- categories

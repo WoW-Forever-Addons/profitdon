@@ -1615,7 +1615,7 @@ local function OnRowClick(it, button)
   if button == "RightButton" then
     if e and e.head and e.listId then ns.ListEntryMenu(e) return end
     local kind, key = ns.ListTarget(it)
-    if kind then ns.ListAddMenu(kind, key, it.title) end
+    if kind then ns.ListAddMenu(kind, key, it.title, ns.FindItems(it)) end
     return
   end
   W.msg = nil
@@ -2135,10 +2135,28 @@ local function ShowMenu(title, items)
   ns.lastMenu = { title = title, items = items } -- (tests)
 end
 
--- right click on a row: on which list
-function ns.ListAddMenu(kind, key, title)
+-- (Daniel 20.11.2026: "den Gegenstand direkt im AH suchen, um vielleicht das Rezept zu sehen") the first entries of a
+-- row's right click: its item searched in Kaufen, in Berufe and Herstellen also the recipe item that teaches it
+function ns.FindItems(it)
+  local e = it and it.entry
+  local id = it and (it.itemID or (e and e.id))
+  local name = id and ns.ItemInfo(id)
+  if not name and id and type(it.title) == "string" and not it.title:find("^Item %d") then name = it.title end
+  local items = {}
+  if not name or tab == "ah" then return items end
+  items[1] = { text = "Im AH suchen", onClick = function() ns.AHFind(name) end }
+  local spell = e and e.r and e.r.spell
+  local scroll = spell and ns.Skill.Learn(spell).item
+  local sname = scroll and ns.ItemInfo(scroll)
+  if sname then items[2] = { text = "Rezept im AH suchen", onClick = function() ns.AHFind(sname) end } end
+  return items
+end
+
+-- right click on a row: on which list (first: what the row offers besides, ns.FindItems)
+function ns.ListAddMenu(kind, key, title, first)
   local SL = ns.ShopLists
   local items = {}
+  for _, x in ipairs(first or {}) do items[#items + 1] = x end
   for _, l in ipairs(SL.All()) do
     local there = SL.Find(l.id, kind, key)
     items[#items + 1] = { text = there and ("Auf \"%s\" (schon drauf: öffnen)"):format(l.name) or ("Auf Liste \"%s\""):format(l.name), onClick = function()
