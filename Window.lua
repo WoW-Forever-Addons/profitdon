@@ -1313,7 +1313,11 @@ local function FillBar()
     if B.entry.purpose then title = name .. "  " .. MUT .. B.entry.purpose .. "|r" end
     -- (Daniel 11.11.2026) the outcome of the last purchase of this item stays in front for a while, in colour
     local st, text, hex = ns.BuySignal(id)
-    if st and not B.armed then sub = ("|c%s%s|r%s"):format(hex, text, (sub and sub ~= "") and ("  ·  " .. sub) or "") end
+    if st and not B.armed then sub = ("|c%s%s|r%s"):format(hex, text, (sub and sub ~= "") and ("  ·  " .. sub) or "")
+    elseif not B.armed and ns.BoughtText and ns.BoughtText(id) then
+      -- (Daniel 20.11.2026) after the signal the sum bought since the AH opened stays
+      sub = ("|cff4fd16b%s|r%s"):format(ns.BoughtText(id), (sub and sub ~= "") and ("  ·  " .. sub) or "")
+    end
   end
   W.bar:SetData({ icon = ns.Icon(id), itemID = id, quality = q, title = title, sub = sub })
   local a, b = Primary()

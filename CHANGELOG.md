@@ -1,5 +1,9 @@
 # Profitdon
 
+## 0.2.2
+- Kaufen und Einkaufsliste: "Gekauft: Anzahl für Preis" bleibt stehen, bis das Auktionshaus schließt (Summe je Gegenstand).
+- Kaufen: bei Einzelposten zählt das Mengenfeld mit jedem Kauf herunter; Knopf und Vorschau sagen klar "nur 1 Stück je Klick".
+
 ## 0.2.1
 - Kaufen: Spalte Stufe, Kategorien bis zur dritten Ebene (z. B. Stäbe), Nur benutzbar prüft Klasse und Stufe,
   ohne Juwelierskunst, neuer Filter Nur unbekannte Rezepte.

@@ -361,12 +361,25 @@ end
 -- a purchase without an answer after 8 s turns "unclear" (bags and gold tell).
 ---------------------------------------------------------------------------
 ns.lastBuy = {}
+-- (Daniel 20.11.2026: "eine Bestätigung da unten neben, wenn das gekauft ist, damit das nicht weggeht") what was bought
+-- of an item since the AH opened, summed over the clicks; it stays until the AH shuts (the signal above goes after 20 s)
+ns.boughtSum = {}
+function ns.BoughtText(id, money)
+  local s = id and ns.boughtSum[id]
+  if not s or s.qty < 1 then return nil end
+  return ("Gekauft: %d für %s"):format(s.qty, (money or ns.Money)(s.cost))
+end
 ns.SIGNAL_SEC = 20
 local SOUND = { ok = 120, fail = 847 } -- LOOT_WINDOW_COIN_SOUND, igQuestFailed
 local function Signal(id, state, qty, cost)
   if not id then return end
   local e = { state = state, qty = qty, cost = cost, t = GetTime() }
   ns.lastBuy[id] = e
+  if state == "ok" then
+    local s = ns.boughtSum[id] or { qty = 0, cost = 0 }
+    s.qty, s.cost = s.qty + (qty or 1), s.cost + (cost or 0)
+    ns.boughtSum[id] = s
+  end
   if SOUND[state] then ns.Call(PlaySound, SOUND[state], "Master") end
   local name = ns.ItemInfo(id) or ("Item " .. id)
   if state == "ok" then ns.Print(("|cff4fd16bGekauft:|r %d× %s für %s"):format(qty or 1, name, ns.Money(cost or 0)))
@@ -743,7 +756,7 @@ ns.On("AUCTION_HOUSE_SHOW_ERROR", function(_, err)
     Settled(w)
   end)
 end)
-ns.On("AUCTION_HOUSE_CLOSED", function() B.state, B.plan, B.entry, waiting = "idle", nil, nil, nil waitMore = {} end)
+ns.On("AUCTION_HOUSE_CLOSED", function() B.state, B.plan, B.entry, waiting = "idle", nil, nil, nil waitMore = {} ns.boughtSum = {} end)
 
 -- the browse answer: the variants of the chosen item (same item ID), each with its cheapest price
 local function OnBrowse()

@@ -890,9 +890,14 @@ function ns.AHPage(parent, UI)
   p.hist = UI.Text(p.buy, "sub", C.muted)
   p.preview = UI.Text(p.buy, "sub", C.body)
   p.msg = UI.Text(p.buy, "sub", C.body)
+  p.done = UI.Text(p.buy, "sub", C.green) -- what was bought of the item since the AH opened, it stays (Buy.lua ns.BoughtText)
   p.qtyL = UI.Text(p.buy, "sub", C.muted) p.qtyL:SetText("Menge")
   p.qty = UI.EditBox(p.buy, { numeric = true, min = 1, placeholder = "1",
-    onChange = function(t) local n = tonumber(t) if n and n >= 1 and B.kind == "ah" then ns.SetWant(n, false) end end,
+    onChange = function(t)
+      if B.kind ~= "ah" or not B.entry then return end
+      ns.SetWant(tonumber(t), false)
+      p.qtyFor = B.entry.want -- typed: Fill leaves the box alone; a purchase changes entry.want and counts the box down
+    end,
     onEnter = function(self) local n = tonumber(self:GetText()) if n and B.kind == "ah" then ns.SetWant(n, true) end p:Fill() end })
   p.max = UI.Button(p.buy, "Max", { small = true, onClick = function()
       if B.kind == "ah" and B.maxQty and B.maxQty > 0 then
@@ -903,7 +908,7 @@ function ns.AHPage(parent, UI)
     end, tooltip = "Max", tooltipLines = { "So viel, wie das Gold kauft (billigste zuerst); ab der Bestätigungsgrenze kommt ein zweiter Klick mit dem Gesamtpreis." } })
   p.go2 = UI.Button(p.buy, "Kaufen", { kind = "primary", onClick = function() ns.BuyNow() p:Fill() end,
     tooltip = "Kaufen", tooltipLines = { "Kauft die Menge zu den billigsten Angeboten.", "Stapelware: ein Klick, das Spiel bestätigt den Preis vorher.",
-      "Einzelauktionen: eine Auktion je Klick.", "Tastenkürzel \"Profitdon: nächster Klick\" geht auch." } })
+      "Einzelposten: nur 1 Stück je Klick, die Menge zählt mit jedem Kauf herunter.", "Tastenkürzel \"Profitdon: nächster Klick\" geht auch." } })
 
   -- a click anywhere outside the results, the price tiers and the buy area lets the picked item go
   local watch = CreateFrame("Frame", nil, p)
@@ -973,13 +978,18 @@ function ns.AHPage(parent, UI)
     self.tiers:SetShown(e and true or false)
     local st, stext, hex = e and ns.BuySignal(e.id)
     self.msg:SetText(st and ("|c%s%s|r"):format(hex, stext) or (e and B.msg) or "")
-    if not self.qty._focus and self.qtyFor ~= (e and e.want) then
+    -- (Daniel 20.11.2026: "das runterzählen lassen, wenn man einen gekauft hat") also while the cursor is still in the
+    -- box: typing keeps qtyFor in step (onChange), so only another item or a purchase gets here
+    if self.qtyFor ~= (e and e.want) then
       self.qtyFor = e and e.want
       self.qty:SetValue(e and e.want and e.want > 0 and e.want or nil)
     end
     local ready = plan and B.state == "ready" and not plan.post
     local spend = plan and (plan.total or plan.price)
-    self.go2:SetText(ready and ("Kaufen: %d für %s"):format(plan.qty or 1, M(spend)) or "Kaufen")
+    local single = ready and not plan.commodity and (B.want or 1) > 1
+    self.go2:SetText(single and ("Kaufen: 1 von %d für %s"):format(B.want, M(spend))
+      or ready and ("Kaufen: %d für %s"):format(plan.qty or 1, M(spend)) or "Kaufen")
+    self.done:SetText(e and ns.BoughtText(e.id, M) or "")
     if self.go2.SetDisabled then self.go2:SetDisabled(not ready) end
     if self.max.SetDisabled then self.max:SetDisabled(not (e and (B.maxQty or 0) > 0)) end
     self:Layout(self.w or 700, self.h or 400)
@@ -1065,6 +1075,9 @@ function ns.AHPage(parent, UI)
     self.max:ClearAllPoints() self.max:SetPoint("LEFT", self.buy, "TOPLEFT", pad + 46 + 70, cy) self.max:Layout(48)
     local gw = min(260, max(120, rw - (pad + 46 + 70 + 48) - 2 * pad - 8))
     self.go2:ClearAllPoints() self.go2:SetPoint("RIGHT", self.buy, "TOPRIGHT", -pad, cy) self.go2:Layout(gw)
+    local dx = pad + 46 + 70 + 48 + 10
+    self.done:ClearAllPoints() self.done:SetPoint("LEFT", self.buy, "TOPLEFT", dx, cy)
+    UI.Fit(self.done, max(10, rw - dx - gw - 2 * pad))
   end
   return p
 end
@@ -1090,7 +1103,7 @@ function ns.AHPreview()
   end
   if p and not p.commodity then
     local left = (B.want or 1) - 1
-    return ("Einzelauktion: 1 Stück für %s je Klick%s  ·  %d im AH, Max %d"):format(M(p.price), left > 0 and (", danach noch " .. left) or "",
+    return ("Einzelposten: nur 1 Stück je Klick (%s)%s  ·  %d im AH, Max %d"):format(M(p.price), left > 0 and (", danach noch " .. left) or "",
       B.avail or 0, B.maxQty or 0)
   end
   if B.ladder and B.ladder[1] then return ("ab %s je Stück, %d im AH, Max %d"):format(M(B.ladder[1].unitPrice), B.avail or 0, B.maxQty or 0) end
