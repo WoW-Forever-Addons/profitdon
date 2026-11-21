@@ -60,7 +60,12 @@ local function Lines(tip, id)
   local ah, src = ns.AHPrice(id)
   local g = ns.DE and ns.DE.Group(id)
   local de = g and ns.DE.Value(g)
-  if not ah and not de then return end
+  -- (Daniel 21.11.2026, Auswahl "Nur anzeigen, nicht rechnen") the median of the price history (own days and the
+  -- shipped seed of all our scans) as a grey line, also for an item missing from the newest scan; no sum uses it
+  local H = ns.History
+  local med, mdays = nil, 0
+  if H and H.Median then med, mdays = H.Median(id) end
+  if not ah and not de and not med then return end
   local cut = P.Cut()
   -- (Daniel 06.11.2026, 284 Rough Dynamite in Baganator, chosen "Alles in den Taschen") the AH line counts everything of the
   -- item in the bags ("AH (284):"), an item outside the bags the stack under the mouse; "Sell Price" stays the game's stack
@@ -74,6 +79,11 @@ local function Lines(tip, id)
   end
   local label = count > 1 and (" (" .. count .. ")") or ""
   if ah then MoneyLine(tip, "AH" .. label .. ":", ah * count) end
+  if med then
+    local tr = H.TrendText and H.TrendText(id) or ""
+    tip:AddLine("|cff8a8f96Median " .. mdays .. (mdays == 1 and " Tag" or " Tage") .. label .. ": " .. ns.Money(med * count, true)
+      .. (tr ~= "" and (" (" .. tr .. ")") or "") .. (ah and "" or ", nicht im letzten Scan") .. "|r")
+  end
   local net = ah and D.AfterCut(ah, cut)
   -- (Daniel 06.11.2026: "besser im AH weglassen, sondern in grün nur AH und dann in Klammern das, was da steht")
   if de and de > math.max(sell or 0, net or 0) then
