@@ -1,5 +1,12 @@
 # Profitdon
 
+## 0.2.5
+- Median und Tendenz: die mitgelieferte Preisgeschichte nimmt jetzt jeden Scan eines Tages aus den Preisgeschichten
+  aller unserer Konten und PCs (vorher nur den letzten Vollscan je Einsammeln), 7383 Gegenstände, Stand 21.11.
+- Leerer Realmname im Spiel: Scans, Preisgeschichte und Figurdaten landen weiter beim Realm (zuletzt bekannter Name);
+  was schon unter leerem Realm gespeichert war, wird beim Laden zum Realm zusammengeführt.
+- Lehrerdaten (Data/Learn.lua) aufgefrischt.
+
 ## 0.2.4
 - Ausrüstung mit Zufallssuffix ("of the Bear", "of Healing"): der Tooltip zeigt jetzt die Werte genau dieser Variante,
   in Kaufen, Verkaufen, Entzaubern und den anderen Listen (vorher nur der Grundgegenstand ohne Werte).

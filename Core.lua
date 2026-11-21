@@ -209,7 +209,69 @@ function ns.Icon(id)
   return ns.Call(GI, id) or 134400
 end
 
-function ns.Realm() return ns.Call(GetRealmName) or "?" end
+-- (21.11.2026, Laptop-Daten: since 21.11. the game gave an empty realm name, scans and characters landed under "|A" and
+-- "Mae-") the realm name, else the normalized one, else the last one seen (ProfitdonDB.realmName), else the one realm of
+-- Data/PriceSeed.lua; "?" only when nothing is known
+local function SeedRealm()
+  local one
+  for k in pairs(ns.PRICE_SEED or {}) do
+    local r = type(k) == "string" and k:match("^(.+)|[ANH]$")
+    if r then
+      if one and one ~= r then return nil end
+      one = r
+    end
+  end
+  return one
+end
+function ns.Realm()
+  local r = ns.Call(GetRealmName)
+  if type(r) ~= "string" or r == "" then r = GetNormalizedRealmName and ns.Call(GetNormalizedRealmName) end
+  if type(r) == "string" and r ~= "" then
+    if ns.db and ns.db.realmName ~= r then ns.db.realmName = r end
+    return r
+  end
+  if ns.db and type(ns.db.realmName) == "string" and ns.db.realmName ~= "" then return ns.db.realmName end
+  return SeedRealm() or "?"
+end
+
+-- (21.11.2026) what was saved under an empty realm ("|A" for an auction house, "Mae-" for a character) goes to the
+-- realm's key once the realm is known: moved when the realm's key is free, else merged (the empty-realm entries are the
+-- newer ones: a snapshot with a time t wins when newer, the price history is merged day by day, else field by field)
+local function MergeKey(name, t, from, to)
+  local src, dst = t[from], t[to]
+  t[from] = nil
+  if dst == nil or type(src) ~= "table" or type(dst) ~= "table" then
+    if src ~= nil then t[to] = src end
+    return
+  end
+  if name == "hist" and ns.History and ns.History.Merge then
+    ns.History.Merge(src, dst)
+  elseif type(src.t) == "number" and type(dst.t) == "number" then
+    if src.t > dst.t then t[to] = src end
+  else
+    for k, v in pairs(src) do dst[k] = v end
+  end
+end
+function ns.FixRealmKeys()
+  local realm = ns.Realm()
+  if not ns.db or realm == "?" then return 0 end
+  local n = 0
+  for name, t in pairs(ns.db) do
+    if type(t) == "table" and name ~= "opt" then
+      local moves = {}
+      for k in pairs(t) do
+        if type(k) == "string" then
+          if k:match("^|[ANH]$") then moves[k] = realm .. k
+          elseif k:match("^[^%-|]+%-$") then moves[k] = k .. realm end
+        end
+      end
+      for from, to in pairs(moves) do MergeKey(name, t, from, to) n = n + 1 end
+    end
+  end
+  if n > 0 then ns.Fact("realmFix", n .. " keys to " .. realm) end
+  return n
+end
+ns.OnInit(function() ns.FixRealmKeys() end)
 -- the character key: first name and realm (Profitdon keeps only the scan wait per character)
 function ns.Me() return (ns.Call(UnitName, "player") or "?") .. "-" .. ns.Realm() end
 

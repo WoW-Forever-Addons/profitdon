@@ -85,6 +85,35 @@ local function Roll(h, day, pause)
   h.d, h.t, h.day = d, {}, day
 end
 
+-- (21.11.2026, Core.lua ns.FixRealmKeys) two histories of one auction house (one saved under an empty realm name) into
+-- dst: both rolled to today, today's readings put together (the newest TODAY_MAX), each earlier day from dst, else src
+function H.Merge(src, dst)
+  if type(src) ~= "table" or type(dst) ~= "table" then return end
+  src.t, src.d = type(src.t) == "table" and src.t or {}, type(src.d) == "table" and src.d or {}
+  dst.t, dst.d = type(dst.t) == "table" and dst.t or {}, type(dst.d) == "table" and dst.d or {}
+  local day = math.max(H.Today(), src.day or 0, dst.day or 0)
+  src.day, dst.day = src.day or day, dst.day or day
+  Roll(src, day)
+  Roll(dst, day)
+  for id, s in pairs(src.t) do
+    local list = Nums(dst.t[id])
+    for _, v in ipairs(Nums(s)) do list[#list + 1] = v end
+    while #list > H.TODAY_MAX do table.remove(list, 1) end
+    local out = {}
+    for i, v in ipairs(list) do out[i] = v and Int(v) or "" end
+    dst.t[id] = table.concat(out, ",")
+  end
+  for id, s in pairs(src.d) do
+    local a, b = Nums(dst.d[id]), Nums(s)
+    local out = {}
+    for i = 1, math.max(#a, #b) do
+      local v = a[i] or b[i]
+      out[i] = v and Int(v) or ""
+    end
+    dst.d[id] = table.concat(out, ",")
+  end
+end
+
 -- one reading of an item (price per unit in copper)
 function H.Add(key, id, price, pause)
   price = tonumber(price)
