@@ -240,6 +240,14 @@ local function PlanCommodity()
   end
 end
 
+-- (Daniel 21.11.2026: "überall fehlen die werte der ausrüstung wenn es of the ... ist") the link of a variant from its
+-- offers, kept per item key (ID and suffix) for the tooltip of the Kaufen row; nil until searched once
+ns.keyLinks = ns.keyLinks or {}
+local function KeyStr(key)
+  return type(key) == "table" and ns.Num(key.itemID) and (ns.Num(key.itemID) .. ":" .. (ns.Num(key.itemSuffix) or 0)) or nil
+end
+function ns.KeyLink(key) local k = KeyStr(key) return k and ns.keyLinks[k] or nil end
+
 local function PlanItem()
   local spend, byMoney = Spend()
   local n = ns.Num(ns.Call(ns.AH.GetNumItemSearchResults, B.key)) or 0
@@ -248,6 +256,7 @@ local function PlanItem()
   local ahOffers = {}
   for i = 1, math.min(n, 200) do
     local r = ns.Call(ns.AH.GetItemSearchResultInfo, B.key, i)
+    if i == 1 and type(r) == "table" and type(r.itemLink) == "string" and KeyStr(B.key) then ns.keyLinks[KeyStr(B.key)] = r.itemLink end
     local price = type(r) == "table" and not r.containsOwnerItem and ns.Num(r.auctionID) and ns.Num(r.buyoutAmount)
     if price and price > 0 and (not low or price < low) then low = price end
     if price then

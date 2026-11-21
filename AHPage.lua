@@ -713,7 +713,9 @@ local function ResultItems()
     local sub = {}
     if r.own then sub[#sub + 1] = "mit eigenem Angebot" end
     if info and info.isCommodity == false then sub[#sub + 1] = "Einzelauktionen" end
-    items[#items + 1] = { kind = "trow", title = r.name, quality = r.quality, itemID = r.id, icon = ns.Icon(r.id), sub = table.concat(sub, ", "),
+    -- (Daniel 21.11.2026) the tooltip of this variant with its suffix stats: its link once searched, else the item key
+    items[#items + 1] = { kind = "trow", title = r.name, quality = r.quality, itemID = r.id, itemKey = r.itemKey, itemLink = ns.KeyLink and ns.KeyLink(r.itemKey) or nil,
+      icon = ns.Icon(r.id), sub = table.concat(sub, ", "),
       cells = { lvl = r.lvl and r.lvl > 0 and tostring(r.lvl) or "", skill = r.skill and tostring(r.skill) or "", qty = r.qty and tostring(r.qty) or "", price = M(r.min), med = M(r.med), trend = tt },
       cellColors = { trend = TrendColor(dir) },
       active = (A.sel == r and B.kind == "ah") or nil, result = r }

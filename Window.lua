@@ -214,7 +214,10 @@ local function Row(id, sub, cells, entry, tip, extra)
   end
   local shift = short and IsShiftKeyDown and IsShiftKeyDown()
   local it = { kind = "trow", title = name, quality = q, itemID = id, icon = ns.Icon(id), sub = sub or "", cells = cells or {},
-    entry = entry, id = id, tipLines = (short and not shift) and short or lines, tipShort = short, tipFull = short and lines or nil }
+    entry = entry, id = id, tipLines = (short and not shift) and short or lines, tipShort = short, tipFull = short and lines or nil,
+    -- (Daniel 21.11.2026: "überall fehlen die werte der ausrüstung wenn es of the ... ist") a piece from the bags: the
+    -- tooltip of the piece itself (its link), with the suffix stats
+    itemLink = type(entry) == "table" and type(entry.link) == "string" and entry.link or nil }
   for k, v in pairs(extra or {}) do it[k] = v end
   return it
 end

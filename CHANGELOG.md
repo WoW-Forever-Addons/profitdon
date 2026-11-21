@@ -1,5 +1,9 @@
 # Profitdon
 
+## 0.2.4
+- Ausrüstung mit Zufallssuffix ("of the Bear", "of Healing"): der Tooltip zeigt jetzt die Werte genau dieser Variante,
+  in Kaufen, Verkaufen, Entzaubern und den anderen Listen (vorher nur der Grundgegenstand ohne Werte).
+
 ## 0.2.3
 - Rechtsklick auf eine Zeile (Berufe, Herstellen und andere Listen): "Im AH suchen" sucht den Gegenstand im Reiter Kaufen,
   "Rezept im AH suchen" das Rezept dazu.

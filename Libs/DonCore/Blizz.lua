@@ -1,4 +1,4 @@
-local Bz = LibStub("DonCore-1.0"):NewModule("Blizz", 10)
+local Bz = LibStub("DonCore-1.0"):NewModule("Blizz", 11)
 if not Bz then return end
 
 ---------------------------------------------------------------------------
@@ -35,6 +35,12 @@ if not Bz then return end
 -- hidden), Button.blizz.
 ---------------------------------------------------------------------------
 local Kit = LibStub("DonCore-1.0"):Get("Kit", 25)
+-- (minor 11, 21.11.2026, Profitdon: gear "of the ..." without its stats) item rows show item.itemLink / item.itemKey,
+-- the variant itself (Kit.SetItemTip, Kit 33); an older Kit: the plain item ID as before
+local function SetItem(tt, it)
+  if Kit and Kit.SetItemTip then return Kit.SetItemTip(tt, it.itemID, it.itemLink, it.itemKey) end
+  return tt.SetItemByID and pcall(tt.SetItemByID, tt, it.itemID)
+end
 local K = setmetatable({}, { __index = Kit or {} })
 Bz.kit = K
 Bz.K = K -- (Profitdon's name for the kit)
@@ -770,7 +776,7 @@ local function RowTip(r)
   if not (tt and tt.SetOwner) then return end
   tt:SetOwner(r, "ANCHOR_RIGHT")
   Bz.NoCompare(tt)
-  if it.itemID and tt.SetItemByID then Call(tt.SetItemByID, tt, it.itemID) else tt:SetText(tostring(it.title or ""), 1, 0.82, 0) end
+  if not (it.itemID and SetItem(tt, it)) then tt:SetText(tostring(it.title or ""), 1, 0.82, 0) end
   for _, l in ipairs(type(it.tipLines) == "table" and it.tipLines or {}) do
     if type(l) == "table" and l[2] ~= nil then tt:AddDoubleLine(tostring(l[1] or ""), tostring(l[2]), 0.7, 0.7, 0.7, 1, 1, 1)
     elseif type(l) == "table" then local cr, cg, cb = RGB(l.color) tt:AddLine(tostring(l[1] or ""), cr, cg, cb, true)
@@ -1523,7 +1529,7 @@ local function ShowTipOf(owner, it, tipFn)
   if type(it) == "table" and it.itemID and GameTooltip and GameTooltip.SetItemByID then
     GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
     Bz.NoCompare(GameTooltip)
-    Call(GameTooltip.SetItemByID, GameTooltip, it.itemID)
+    SetItem(GameTooltip, it)
     for _, l in ipairs(type(it.tipLines) == "table" and it.tipLines or {}) do
       if type(l) == "table" and l[2] ~= nil then GameTooltip:AddDoubleLine(tostring(l[1] or ""), tostring(l[2]), 0.7, 0.7, 0.7, 1, 1, 1)
       elseif l then GameTooltip:AddLine(tostring(type(l) == "table" and l[1] or l), 1, 1, 1, true) end
