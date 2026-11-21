@@ -706,9 +706,10 @@ local function ResultItems()
     local name, _, quality = ns.ItemInfo(r.id)
     r.name = (info and info.itemName) or name or ("Item " .. r.id)
     r.quality = (info and ns.Num(info.quality)) or quality
-    r.med = H and H.Median(r.id)
+    -- (21.11.2026, Ruckler) median and trend kept per item (History.lua H.Info)
     local tt, col, dir, pct = "", nil, nil, nil
-    if H then tt, col, dir, pct = H.TrendText(r.id) end
+    r.med = nil
+    if H then r.med, _, tt, col, dir, pct = H.Info(r.id) end
     r.pct = pct
     local sub = {}
     if r.own then sub[#sub + 1] = "mit eigenem Angebot" end

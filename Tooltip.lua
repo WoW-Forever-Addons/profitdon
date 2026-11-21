@@ -59,12 +59,14 @@ local function Lines(tip, id)
   local sell = P.Sell(id)
   local ah, src = ns.AHPrice(id)
   local g = ns.DE and ns.DE.Group(id)
-  local de = g and ns.DE.Value(g)
+  -- (21.11.2026, Ruckler) kept per group (Disenchant.lua DE.TipValue), as kept median and trend (History.lua H.Info)
+  local de
+  if g then if ns.DE.TipValue then de = ns.DE.TipValue(g) else de = ns.DE.Value(g) end end
   -- (Daniel 21.11.2026, Auswahl "Nur anzeigen, nicht rechnen") the median of the price history (own days and the
   -- shipped seed of all our scans) as a grey line, also for an item missing from the newest scan; no sum uses it
   local H = ns.History
-  local med, mdays = nil, 0
-  if H and H.Median then med, mdays = H.Median(id) end
+  local med, mdays, tr = nil, 0, ""
+  if H and H.Info then med, mdays, tr = H.Info(id) end
   -- (Daniel 21.11.2026, Recipe: Potion of Demonslaying without any line, chosen "graue Hinweiszeile") no price from any
   -- source: say so, so it is clear Profitdon runs and only the price is missing
   -- (Daniel 21.11.2026: "bei soulbound den tooltip weg") not for an item that binds when picked up or is a quest item:
@@ -83,13 +85,12 @@ local function Lines(tip, id)
   local shift = IsShiftKeyDown and IsShiftKeyDown()
   local count = 1
   if shift then
-    count = ns.BagCount(id)
+    count = (ns.BagCountKept or ns.BagCount)(id)
     if count == 0 then count = StackCount(tip, id) or 1 end
   end
   local label = count > 1 and (" (" .. count .. ")") or ""
   if ah then MoneyLine(tip, "AH" .. label .. ":", ah * count) end
   if med then
-    local tr = H.TrendText and H.TrendText(id) or ""
     tip:AddLine("|cff8a8f96Median " .. mdays .. (mdays == 1 and " Tag" or " Tage") .. label .. ": " .. ns.Money(med * count, true)
       .. (tr ~= "" and (" (" .. tr .. ")") or "") .. (ah and "" or ", nicht im letzten Scan") .. "|r")
   end

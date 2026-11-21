@@ -237,7 +237,7 @@ end
 -- (21.11.2026) what was saved under an empty realm ("|A" for an auction house, "Mae-" for a character) goes to the
 -- realm's key once the realm is known: moved when the realm's key is free, else merged (the empty-realm entries are the
 -- newer ones: a snapshot with a time t wins when newer, the price history is merged day by day, else field by field)
-local function MergeKey(name, t, from, to)
+local function MergeKey(name, t, from, to, later)
   local src, dst = t[from], t[to]
   t[from] = nil
   if dst == nil or type(src) ~= "table" or type(dst) ~= "table" then
@@ -245,14 +245,15 @@ local function MergeKey(name, t, from, to)
     return
   end
   if name == "hist" and ns.History and ns.History.Merge then
-    ns.History.Merge(src, dst)
+    -- (21.11.2026, Ruckler) at login as a background job (History.lua H.MergeLater: the store waits for it before any write)
+    if later and ns.History.MergeLater then ns.History.MergeLater(src, dst) else ns.History.Merge(src, dst) end
   elseif type(src.t) == "number" and type(dst.t) == "number" then
     if src.t > dst.t then t[to] = src end
   else
     for k, v in pairs(src) do dst[k] = v end
   end
 end
-function ns.FixRealmKeys()
+function ns.FixRealmKeys(later)
   local realm = ns.Realm()
   if not ns.db or realm == "?" then return 0 end
   local n = 0
@@ -265,13 +266,13 @@ function ns.FixRealmKeys()
           elseif k:match("^[^%-|]+%-$") then moves[k] = k .. realm end
         end
       end
-      for from, to in pairs(moves) do MergeKey(name, t, from, to) n = n + 1 end
+      for from, to in pairs(moves) do MergeKey(name, t, from, to, later) n = n + 1 end
     end
   end
   if n > 0 then ns.Fact("realmFix", n .. " keys to " .. realm) end
   return n
 end
-ns.OnInit(function() ns.FixRealmKeys() end)
+ns.OnInit(function() ns.FixRealmKeys(true) end)
 -- the character key: first name and realm (Profitdon keeps only the scan wait per character)
 function ns.Me() return (ns.Call(UnitName, "player") or "?") .. "-" .. ns.Realm() end
 
@@ -355,7 +356,8 @@ ns.On("BANKFRAME_CLOSED", ns.Touch)
 -- and no bag event came; callers get a copy (some count down in what they get). ns.bagCacheOff: the tests' bags change
 -- without events.
 local bagSnap, bagAt, normalSnap, normalAt
-local function BagsDirty() bagSnap, normalSnap = nil, nil end
+local countSnap
+local function BagsDirty() bagSnap, normalSnap, countSnap = nil, nil, nil end
 ns.On("BAG_UPDATE", BagsDirty)
 ns.On("BAG_UPDATE_DELAYED", BagsDirty)
 ns.On("ITEM_LOCK_CHANGED", BagsDirty)
@@ -372,6 +374,13 @@ function ns.Bags()
     for id, n in pairs(out) do bagSnap[id] = n end
   end
   return out
+end
+-- (21.11.2026, Ruckler: the tooltip with Shift read every bag slot on each build, about 5 times a second) how many of an
+-- item the bags hold, as ns.BagCount, from a snapshot kept until a bag event (BagsDirty) instead of one frame
+function ns.BagCountKept(id)
+  if ns.bagCacheOff then return ns.BagCount(id) end
+  if not countSnap then countSnap = ns.BagsRead() end
+  return countSnap[id] or 0
 end
 function ns.BagsRead()
   local out = {}

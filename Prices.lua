@@ -11,15 +11,30 @@ ns.Prices = P
 
 local NEUTRAL = { ["Booty Bay"] = true, ["Gadgetzan"] = true, ["Everlook"] = true, ["Beutebucht"] = true, ["Ewige Warte"] = true }
 
+-- (21.11.2026, Ruckler: every tooltip asked the zone, realm and faction several times, each through pcall) the zone's
+-- answer and the keys are kept until the zone changes (ZONE_CHANGED, ZONE_CHANGED_INDOORS, ZONE_CHANGED_NEW_AREA,
+-- PLAYER_ENTERING_WORLD); nothing is kept while the zone has no name yet or the realm is unknown ("?")
+local atNeutral, keyOf = nil, {}
+function P.ZoneDirty() atNeutral, keyOf = nil, {} end
+for _, e in ipairs({ "ZONE_CHANGED", "ZONE_CHANGED_INDOORS", "ZONE_CHANGED_NEW_AREA", "PLAYER_ENTERING_WORLD" }) do ns.On(e, P.ZoneDirty) end
+
 function P.AtNeutral()
+  if atNeutral ~= nil then return atNeutral end
   local sub, zone = ns.Call(GetSubZoneText) or "", ns.Call(GetZoneText) or ""
-  return NEUTRAL[sub] or NEUTRAL[zone] or false
+  local v = NEUTRAL[sub] or NEUTRAL[zone] or false
+  if sub ~= "" or zone ~= "" then atNeutral = v end
+  return v
 end
 
 function P.StoreKey(neutral)
   if neutral == nil then neutral = P.AtNeutral() end
+  local k = keyOf[neutral]
+  if k then return k end
   local fac = neutral and "N" or ((ns.Call(UnitFactionGroup, "player") == "Horde") and "H" or "A")
-  return ns.Realm() .. "|" .. fac
+  local realm = ns.Realm()
+  k = realm .. "|" .. fac
+  if realm ~= "?" then keyOf[neutral] = k end
+  return k
 end
 
 function P.Cut(neutral)
@@ -143,7 +158,10 @@ local function Row(key, id)
   return r or nil
 end
 P.Row = Row
-function P.Invalidate() cache = {} end
+-- (21.11.2026, Ruckler) P.ver counts every change of the scan rows (a scan saved, one item searched, Invalidate):
+-- the tooltip's disenchant values are kept for the same version (Disenchant.lua DE.TipValue)
+P.ver = 0
+function P.Invalidate() cache = {} P.ver = P.ver + 1 end
 
 -- lowest buyout per unit, median per unit, quantity, auctions, scan age in seconds
 function P.AH(id, key)
@@ -268,6 +286,7 @@ function P.SaveItem(key, id, v)
   st.pt[id] = time()
   local c = cache[key]
   if c then c.rows[id] = nil end
+  P.ver = P.ver + 1
   -- (Daniel 20.11.2026) the day's price history (History.lua)
   if v and ns.History then ns.History.Add(key, id, v[6] or v[1]) end
 end

@@ -2085,6 +2085,9 @@ end
 -- (08.11.2026) the lists in slices (Scan.lua ComputeLater), not 268000 auctions in one frame
 function ns.OptionChanged()
   ns.Touch()
+  -- (21.11.2026, Ruckler) the tooltip's kept values (Disenchant.lua DE.TipValue, History.lua H.Info) go
+  if ns.DE then ns.DE.ver = (ns.DE.ver or 0) + 1 end
+  if ns.History and ns.History.Bump then ns.History.Bump() end
   if ns.Crafts and ns.Crafts.ApplyRecipeList then ns.Crafts.ApplyRecipeList() end
   if ns.ComputeLater then ns.ComputeLater(ns.Refresh) return end
   if ns.Compute then ns.Try(ns.Compute) end

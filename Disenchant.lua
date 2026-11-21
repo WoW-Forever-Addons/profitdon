@@ -181,6 +181,7 @@ end
 -- mats" (DE.BUFF_PCT); /profit diag line deBuff says what the game gave. The hand-set option counts always; the larger wins.
 DE.BUFF_SPELL, DE.BUFF_PCT = 1283701, 10
 local buffPct -- nil: not asked yet, 0: not active
+local lastFact, lastName, lastPct
 local function ReadBuff()
   local A = rawget(_G, "C_UnitAuras")
   local get = type(A) == "table" and A.GetPlayerAuraBySpellID
@@ -193,9 +194,13 @@ local function ReadBuff()
     if v and v >= 1 and v <= 100 then pct = v break end
   end
   -- (16.11.2026) the player's auras change often in a fight: the line is written when it says something new
-  local line = ("%s aktiv, Wert aus dem Spiel %s, gerechnet %d %%"):format(tostring(aura.name or DE.BUFF_SPELL), tostring(pct or "keiner"), pct or DE.BUFF_PCT)
+  -- (21.11.2026, Ruckler) and only then formatted: the same name and value as the last line written is nothing new
   local f = ns.db and ns.db.facts and ns.db.facts.deBuff
-  if not (f and f.v == line) then ns.Fact("deBuff", line) end
+  if not (f and f == lastFact and aura.name == lastName and pct == lastPct) then
+    local line = ("%s aktiv, Wert aus dem Spiel %s, gerechnet %d %%"):format(tostring(aura.name or DE.BUFF_SPELL), tostring(pct or "keiner"), pct or DE.BUFF_PCT)
+    if not (f and f.v == line) then ns.Fact("deBuff", line) end
+    lastFact, lastName, lastPct = ns.db and ns.db.facts and ns.db.facts.deBuff, aura.name, pct
+  end
   return pct or DE.BUFF_PCT
 end
 function DE.BuffPct()
@@ -211,12 +216,13 @@ ns.On("UNIT_AURA", function(_, unit)
   if now == buffPct then return end
   local first = buffPct == nil
   buffPct = now
+  DE.ver = (DE.ver or 0) + 1
   if first and now == 0 then return end
   ns.Print(now > 0 and ("Boosted Disenchanting aktiv: Entzauberwerte mit %d %% mehr Mats gerechnet."):format(now)
     or "Boosted Disenchanting vorbei: Entzauberwerte wieder ohne Bonus.")
   if ns.OptionChanged then ns.OptionChanged() end
 end)
-ns.On("PLAYER_ENTERING_WORLD", function() buffPct = nil end)
+ns.On("PLAYER_ENTERING_WORLD", function() buffPct = nil DE.ver = (DE.ver or 0) + 1 end)
 -- what the own disenchants say about the buff: mats per disenchant with and without it over the groups measured in
 -- both ways; nil until both have rolls. Returns the measured bonus in percent, rolls with, rolls without
 function DE.BuffMeasured()
@@ -247,6 +253,38 @@ function DE.Value(group, key)
     parts[#parts + 1] = { m = m, net = net, unit = unit, src = psrc, value = v }
   end
   return math.floor(sum + 0.5), parts, missing, src, measured
+end
+
+-- (21.11.2026, Ruckler: every tooltip build worked out the disenchant value anew, Blizzard builds a bag tooltip about 5
+-- times a second) DE.Value(group) for the tooltip, kept per group while nothing it comes from changed: the scan rows
+-- (Prices P.ver, the store and its time), the auction house and its cut (StoreKey, the options cutOwn and cutNeutral),
+-- the own rolls of the group (deStats, the table and its count), the options deMinRolls, deBonus, deBuff and tsm, the
+-- buff's bonus and DE.ver (a roll written down, an option changed, the buff came or went). With TSM in use at most
+-- TIP_TTL seconds, TSM's own values may change meanwhile.
+DE.ver = 0
+DE.TIP_TTL = 30
+local tipVal, tipStamp = {}, {}
+function DE.TipValue(group)
+  if not group then return nil end
+  local P, O = ns.Prices, ns.db and ns.db.opt or {}
+  local key = P.StoreKey()
+  local st = P.Store(key)
+  local tsm = P.TSMReady()
+  local s, now = tipStamp, ns.Call(GetTime) or 0
+  if s.de ~= DE.ver or s.p ~= P.ver or s.key ~= key or s.st ~= st or s.t ~= (st and st.t) or s.cutOwn ~= O.cutOwn
+    or s.cutNeutral ~= O.cutNeutral or s.rolls ~= O.deMinRolls or s.bonus ~= O.deBonus or s.buffOpt ~= O.deBuff
+    or s.tsm ~= tsm or s.buff ~= DE.BuffPct() or s.stats ~= (ns.db and ns.db.deStats) or (tsm and now - (s.at or 0) > DE.TIP_TTL) then
+    tipStamp = { de = DE.ver, p = P.ver, key = key, st = st, t = st and st.t, cutOwn = O.cutOwn, cutNeutral = O.cutNeutral,
+      rolls = O.deMinRolls, bonus = O.deBonus, buffOpt = O.deBuff, tsm = tsm, buff = DE.BuffPct(), stats = ns.db and ns.db.deStats, at = now }
+    tipVal = {}
+  end
+  local own = Stats(group)
+  local e = tipVal[group]
+  if not e or e.own ~= own or e.n ~= (own and own.n) then
+    e = { own = own, n = own and own.n, v = DE.Value(group) }
+    tipVal[group] = e
+  end
+  return e.v
 end
 
 -- (Daniel 15.11.2026: "irreführend mit dem gewinn ... man müsste ja etliche kaufen um die prozentuale dropchance zu
@@ -360,6 +398,7 @@ function DE.Record(group, loot)
   local s = ns.db[where][group]
   if type(s) ~= "table" then s = { n = 0, m = {} } ns.db[where][group] = s end
   s.n = (s.n or 0) + 1
+  DE.ver = (DE.ver or 0) + 1
   s.m = s.m or {}
   for id, q in pairs(loot) do
     local m = s.m[id] or { 0, 0, q, q }

@@ -36,6 +36,7 @@ local function Learn()
   ns.db.buy = ns.db.buy or {}
   local name = ns.Call(UnitName, "npc") or "?"
   local map, x, y = Here()
+  local barter = ns.Prices.Barter()
   for i = 1, n do
     local id, info = ItemAt(i)
     if id and info and not info.hasExtendedCost then
@@ -44,7 +45,15 @@ local function Learn()
         local old = ns.db.buy[id]
         if not old or price / stack <= old[1] / old[2] or old[4] == name then
           -- [9] (16.11.2026): the Bartering discount the price was seen with (Prices.lua P.VendorBuy)
-          ns.db.buy[id] = { price, stack, (info.numAvailable or -1) >= 0 and 1 or 0, name, map, x, y, time(), ns.Prices.Barter() }
+          local lim = (info.numAvailable or -1) >= 0 and 1 or 0
+          -- (21.11.2026, Ruckler: MERCHANT_UPDATE comes after every purchase and stock tick) an entry that says the same
+          -- only gets the new time, no new table
+          if old and old[1] == price and old[2] == stack and old[3] == lim and old[4] == name and old[5] == map
+            and old[6] == x and old[7] == y and old[9] == barter then
+            old[8] = time()
+          else
+            ns.db.buy[id] = { price, stack, lim, name, map, x, y, time(), barter }
+          end
         end
       end
     end
