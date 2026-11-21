@@ -1,5 +1,9 @@
 # Profitdon
 
+## 0.2.8
+- Tooltip: der Hinweis "AH: keine Angebote bekannt" entfällt bei seelengebundenen Gegenständen und Questgegenständen,
+  die nie ins AH kommen.
+
 ## 0.2.7
 - Tooltip: hat ein Gegenstand gar keinen AH-Preis (kein Scan, keine Preisgeschichte, kein TSM), steht dort jetzt grau
   "AH: keine Angebote bekannt" statt nichts.

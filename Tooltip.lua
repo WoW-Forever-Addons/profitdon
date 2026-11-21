@@ -67,8 +67,12 @@ local function Lines(tip, id)
   if H and H.Median then med, mdays = H.Median(id) end
   -- (Daniel 21.11.2026, Recipe: Potion of Demonslaying without any line, chosen "graue Hinweiszeile") no price from any
   -- source: say so, so it is clear Profitdon runs and only the price is missing
+  -- (Daniel 21.11.2026: "bei soulbound den tooltip weg") not for an item that binds when picked up or is a quest item:
+  -- it never reaches the AH (GetItemInfo's 14th value, bindType 1 or 4)
   if not ah and not de and not med then
-    tip:AddLine("|cff8a8f96AH: keine Angebote bekannt|r")
+    local GI = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+    local bind = select(14, ns.Call(GI, id))
+    if bind ~= 1 and bind ~= 4 then tip:AddLine("|cff8a8f96AH: keine Angebote bekannt|r") end
     return
   end
   local cut = P.Cut()
