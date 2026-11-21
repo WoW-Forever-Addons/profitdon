@@ -447,6 +447,17 @@ local function FoundNote(out, hidden)
   if hidden > 0 then out[#out + 1] = { kind = "note", top = true, text = ("Suche \"%s\": %d Rezepte ausgeblendet."):format(find, hidden) } end
 end
 
+-- (Daniel 16.11.2026: "zuerst in grün oder rot schreiben, ob das rezept bereits gelernt ist oder fehlt") Berufe and
+-- Entzaubern > Herstellen with all recipes
+local function KnownLead(v)
+  if v.knownBy and #v.knownBy > 0 then
+    local names = {}
+    for _, ch in ipairs(v.knownBy) do names[#names + 1] = ns.Skill.Short(ch) end
+    return GRN .. "gelernt: " .. table.concat(names, ", ") .. "|r  "
+  end
+  return RED .. "fehlt|r  "
+end
+
 -- the rows of the list on screen
 local function Rows()
   local out, B, Cr, DE = {}, ns.BuyState, ns.Crafts, ns.DE
@@ -461,12 +472,7 @@ local function Rows()
     for _, v in ipairs(rows) do
       local ptext, lacking = PartsText(v)
       -- (Daniel 16.11.2026: "zuerst in grün oder rot schreiben, ob das rezept bereits gelernt ist oder fehlt") first in the line
-      local lead
-      if #v.knownBy > 0 then
-        local names = {}
-        for _, ch in ipairs(v.knownBy) do names[#names + 1] = ns.Skill.Short(ch) end
-        lead = GRN .. "gelernt: " .. table.concat(names, ", ") .. "|r  "
-      else lead = RED .. "fehlt|r  " end
+      local lead = KnownLead(v)
       local who = ""
       -- (Durchsicht 11.11.2026) Berufe counts the profession as complete: a step on the way this character cannot make is named
       -- (11.11.2026, Bild 134859: "Zwischenrezept fehlt dir: L..." cut off) short, the note on top explains the yellow
@@ -500,7 +506,10 @@ local function Rows()
   end
   if CRAFT_MODE[tab] then
     local mode = CRAFT_MODE[tab]
-    local rows, missing, st = Cr.Rows(mode)
+    -- (Daniel 21.11.2026) Entzaubern > Herstellen: also every recipe of one or all professions, as in Berufe
+    local view = tab == "demake" and Cr.DeView() or "mine"
+    local rows, missing, st
+    if view ~= "mine" then rows, missing, st = Cr.ProfRows(view, mode) else rows, missing, st = Cr.Rows(mode) end
     local hidden
     rows, hidden = Found(rows)
     FoundNote(out, hidden)
@@ -508,7 +517,11 @@ local function Rows()
       local cells
       if mode == "de" then
         cells = { cost = M(v.cost), value = M(v.de), profit = MS(v.deProfit), roi = Pct(v.deRoi) }
-        out[#out + 1] = Row(v.id, CooldownLead(v) .. DE.Text(v.group), cells, v, CraftTip(v, true),
+        local lead = ""
+        if v.view then
+          lead = KnownLead(v) .. (view == "all" and (MUT .. Cr.ProfName(v.r.prof) .. "|r  ") or "")
+        end
+        out[#out + 1] = Row(v.id, lead .. CooldownLead(v) .. DE.Text(v.group), cells, v, CraftTip(v, true),
           { sv = { cost = v.cost, value = v.de, profit = v.deProfit, roi = v.deRoi } })
       elseif mode == "ah" then
         local ahP, ahR = v.ahExpProfit or v.ahProfit, v.ahExpProfit and v.ahExpRoi or v.ahRoi
@@ -549,7 +562,10 @@ local function Rows()
     if (st.data or 0) > 0 then out[#out + 1] = { kind = "note", text = ("%d Rezepte ohne Reagenzdaten: einmal das Berufsfenster öffnen."):format(st.data) } end
     if mode == "ah" and (st.noAH or 0) > 0 then out[#out + 1] = { kind = "note", text = ("%d Rezepte ohne AH-Preis für das Ergebnis (nicht im Scan)."):format(st.noAH) } end
     if mode == "de" and st.noDE > 0 then out[#out + 1] = { kind = "note", text = ("%d Rezepte machen nichts Entzauberbares."):format(st.noDE) } end
-    if st.known == 0 then out[#out + 1] = { kind = "note", text = "Noch keine Rezepte gelesen: einmal das Berufsfenster öffnen." } end
+    if view ~= "mine" and #rows > 0 then
+      out[#out + 1] = { kind = "note", top = true, color = C.yellow, text = "Gerechnet, als wäre der Beruf voll gelernt. Vorn steht grün, wer ein Rezept kann, rot \"fehlt\", wenn es keiner deiner Chars kann." }
+    end
+    if st.known == 0 and view == "mine" then out[#out + 1] = { kind = "note", text = "Noch keine Rezepte gelesen: einmal das Berufsfenster öffnen." } end
   elseif tab == "skill" then
     SkillRows(out)
   elseif IsShop(tab) then
@@ -1427,6 +1443,7 @@ local function Place()
     { W.sChar, 120, tab == "skill" },
     { W.sProf, 130, tab == "skill" },
     { W.pProf, 150, PROF_MODE[tab] and true or false },
+    { W.dProf, 150, tab == "demake" },
     { W.clear, 100, tab == "shop" and #ns.Skill.Plan() > 0 },
     { W.live, 100, live and true or false },
     { W.best, 80, bestHead and true or false },
@@ -1736,6 +1753,15 @@ local function BuildWith()
     end,
     get = function() return ns.Crafts.ViewProf() or 0 end,
     set = function(v) if v ~= 0 then ns.Crafts.SetViewProf(v) end Draw() end })
+  -- (Daniel 21.11.2026, Bild Entzaubern > Herstellen: "alle rezepte und alle berufe auswählbar machen")
+  W.dProf = UI.Dropdown(lp, {
+    items = function()
+      local list = { { value = "mine", text = "Meine Rezepte" }, { value = "all", text = "Alle Berufe" } }
+      for _, p in ipairs(ns.Crafts.ProfList()) do list[#list + 1] = { value = p, text = ns.Crafts.ProfName(p) } end
+      return list
+    end,
+    get = function() return ns.Crafts.DeView() end,
+    set = function(v) ns.Crafts.SetDeView(v) Draw() end })
   W.clear = UI.Button(lp, "Liste leeren", { small = true, confirm = true, onClick = function() ns.Skill.Clear() Draw() end,
     tooltip = "Liste leeren", tooltipLines = { "Nimmt alle Rezepte aus Skillen von der Einkaufsliste." } })
   W.live = UI.Button(lp, "Live prüfen", { small = true, onClick = function()

@@ -1,5 +1,10 @@
 # Profitdon
 
+## 0.2.10
+- Kaufen im Auktionshaus: nach einem Kauf kam ein Lua-Fehler (AHPage.lua), die Meldung "Gekauft" steht jetzt wieder farbig.
+- Kaufen: Shift+Linksklick auf einen Gegenstand (Taschen, Chatlink) sucht ihn direkt, solange Kaufen offen ist und keine Chatzeile.
+- Entzaubern > Herstellen: Auswahl "Meine Rezepte", "Alle Berufe" oder ein Beruf, wie in Berufe gerechnet, vorn gelernt oder fehlt.
+
 ## 0.2.9
 - Flüssiger: der Tooltip merkt sich Median, Tendenz, Entzauberwert und Taschenzahl, statt sie beim Zeigen auf
   Gegenstände mehrmals je Sekunde neu zu rechnen; die Preisgeschichte rollt am Tagesanfang in kleinen Schritten.

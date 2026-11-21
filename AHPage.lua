@@ -533,6 +533,24 @@ function ns.AHFind(text)
   return sent
 end
 
+-- (Daniel 21.11.2026: "shift + linksklick auf ein item in der bag, dann soll es in der ah suche auftauchen") a shift
+-- click on an item (bags, Baganator, chat links) ends in ChatEdit_InsertLink; while Kaufen is on the screen and no chat
+-- line is open, its name is searched there. Blizzard's own window does the same with its hidden search bar, harmless.
+function ns.AHLinkClick(text)
+  if type(text) ~= "string" or not text:find("|Hitem:", 1, true) then return false end
+  local p = ns.ahPage
+  if not (p and p.IsVisible and p:IsVisible()) then return false end
+  local active = _G.ChatEdit_GetActiveWindow and _G.ChatEdit_GetActiveWindow()
+  if active then return false end
+  local name = (_G.GetItemInfo and (GetItemInfo(text))) or text:match("|h%[(.-)%]|h")
+  if not name or name == "" then return false end
+  ns.AHFind(name)
+  return true
+end
+if _G.hooksecurefunc and _G.ChatEdit_InsertLink then
+  hooksecurefunc("ChatEdit_InsertLink", function(text) ns.Call(ns.AHLinkClick, text) end)
+end
+
 -- a filter changed: searched again at once when there was a search and its filters differ (Enter and the focus lost
 -- of a level box both land here; the sign keeps it to one query)
 function ns.AHFilterApply()
@@ -963,8 +981,13 @@ function ns.AHPage(parent, UI)
   p.qty = UI.EditBox(p.buy, { numeric = true, min = 1, placeholder = "1",
     onChange = function(t)
       if B.kind ~= "ah" or not B.entry then return end
-      ns.SetWant(tonumber(t), false)
-      p.qtyFor = B.entry.want -- typed: Fill leaves the box alone; a purchase changes entry.want and counts the box down
+      -- typed: Fill leaves the box alone; a purchase changes entry.want and counts the box down. Set before SetWant:
+      -- (Daniel 21.11.2026 "schreibt er 2, dann springt er nach vorne") SetWant redraws at once, and with qtyFor still
+      -- old the redraw wrote the box anew and put the cursor in front
+      local n = tonumber(t)
+      p.qtyFor = n and n >= 1 and math.floor(n) or 0
+      ns.SetWant(n, false)
+      p.qtyFor = B.entry.want
     end,
     onEnter = function(self) local n = tonumber(self:GetText()) if n and B.kind == "ah" then ns.SetWant(n, true) end p:Fill() end })
   p.max = UI.Button(p.buy, "Max", { small = true, onClick = function()
@@ -1045,8 +1068,10 @@ function ns.AHPage(parent, UI)
     self.tiers:SetItems(self.tierItems)
     self.tiers:SetEmpty(e and "Angebote werden gesucht..." or "")
     self.tiers:SetShown(e and true or false)
-    local st, stext, hex = e and ns.BuySignal(e.id)
-    self.msg:SetText(st and ("|c%s%s|r"):format(hex, stext) or (e and B.msg) or "")
+    -- (21.11.2026 Fehler nach Kauf) "e and f()" keeps only the first return value, so hex was nil
+    local st, stext, hex
+    if e then st, stext, hex = ns.BuySignal(e.id) end
+    self.msg:SetText(st and hex and ("|c%s%s|r"):format(hex, stext or "") or (e and B.msg) or "")
     -- (Daniel 20.11.2026: "das runterzählen lassen, wenn man einen gekauft hat") also while the cursor is still in the
     -- box: typing keeps qtyFor in step (onChange), so only another item or a purchase gets here
     if self.qtyFor ~= (e and e.want) then

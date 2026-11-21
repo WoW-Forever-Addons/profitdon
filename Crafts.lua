@@ -1914,6 +1914,15 @@ function Cr.ViewProf()
   return list[1]
 end
 function Cr.SetViewProf(p) ns.db.profView = p Cr.sel = nil end
+-- (Daniel 21.11.2026) Entzaubern > Herstellen: "mine" (the recipes of this character, as before), "all" (every
+-- profession in the data) or one profession (ProfitdonDB.deView)
+function Cr.DeView()
+  local want = ns.db.deView
+  if want == "all" then return "all" end
+  for _, p in ipairs(Cr.ProfList()) do if p == want then return p end end
+  return "mine"
+end
+function Cr.SetDeView(v) ns.db.deView = (v ~= "mine") and v or nil Cr.sel = nil end
 -- the own characters (this realm) who know a recipe
 function Cr.KnownBy(spell)
   local out, me, realm = {}, ns.Me(), "-" .. ns.Realm()
@@ -1926,32 +1935,39 @@ function Cr.KnownBy(spell)
   return out
 end
 -- the rows of the profession: mode "vendor" or "ah" as in Cr.Rows, every recipe, learnable or known
+-- (Daniel 21.11.2026, Bild Entzaubern > Herstellen: "alle rezepte und alle berufe auswählbar machen") also mode "de"
+-- (crafts to disenchant) and prof "all": every profession, each valued as if at its own top
 function Cr.ProfRows(prof, mode)
-  Cr.cache = {}
-  Cr.assume = prof
   local st = { known = 0, price = 0, data = 0, below = 0, noAH = 0, noDE = 0 }
   local ok, rows = pcall(function()
     local out, seen = {}, {}
     local all = ns.db.craftAll
-    local function one(spell)
+    local function one(spell, pf)
       if seen[spell] then return end
-      seen[spell] = true
       local r = Cr.Recipe(spell)
-      if not (r and r.prof == prof) then return end
+      if not (r and r.prof == pf) then return end
+      seen[spell] = true
       st.known = st.known + 1
+      -- (all professions: only gear gets valued, the rest is skipped before the costly part)
+      if mode == "de" and r.item and r.item > 0 and not ns.DE.Group(r.item) then st.noDE = st.noDE + 1 return end
       local v, why = Cr.Value(r)
       if not v then st[why or "data"] = (st[why or "data"] or 0) + 1 return end
-      local profit = mode == "ah" and (v.ahExpProfit or v.ahProfit) or v.profit
-      if not profit then st.noAH = st.noAH + 1 return end
+      local profit
+      if mode == "de" then profit = v.deProfit elseif mode == "ah" then profit = v.ahExpProfit or v.ahProfit else profit = v.profit end
+      if not profit then if mode == "de" then st.noDE = st.noDE + 1 else st.noAH = st.noAH + 1 end return end
       if not (all or ns.Deals.Worth(profit, v.cost)) then st.below = st.below + 1 return end
-      if mode ~= "ah" and v.sellGuess and profit > 0 then st.wait = (st.wait or 0) + 1 return end
+      if mode == "vendor" and v.sellGuess and profit > 0 then st.wait = (st.wait or 0) + 1 return end
       v.mode, v.show, v.view = mode, profit, true
       v.knownBy = Cr.KnownBy(spell)
-      if mode ~= "ah" then Cr.RunsOf(v) end
+      if mode == "vendor" then Cr.RunsOf(v) end
       out[#out + 1] = v
     end
-    for spell in pairs(ns.CRAFTS or {}) do one(spell) end
-    for spell in pairs(type(ns.db.craftExtra) == "table" and ns.db.craftExtra or {}) do one(spell) end
+    -- each profession on its own: the cache and the made-on-the-way steps belong to the profession assumed
+    for _, pf in ipairs(prof == "all" and Cr.ProfList() or { prof }) do
+      Cr.cache, Cr.assume = {}, pf
+      for spell in pairs(ns.CRAFTS or {}) do one(spell, pf) end
+      for spell in pairs(type(ns.db.craftExtra) == "table" and ns.db.craftExtra or {}) do one(spell, pf) end
+    end
     table.sort(out, function(a, b) if a.show ~= b.show then return a.show > b.show end return a.r.spell < b.r.spell end)
     return out
   end)
