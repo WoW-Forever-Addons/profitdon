@@ -45,7 +45,7 @@ local K = setmetatable({}, { __index = Kit or {} })
 Bz.kit = K
 Bz.K = K -- (Profitdon's name for the kit)
 K.blizzLook = true -- a caller can tell the two kits apart
-Bz.VERSION = 10
+Bz.VERSION = 11
 Bz.ROW_H = 24 -- the row height of Bz.List without opts.rowHeight (Profitdon's craft and sell lists)
 if Bz.light == nil then Bz.light = true end
 

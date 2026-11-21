@@ -65,7 +65,12 @@ local function Lines(tip, id)
   local H = ns.History
   local med, mdays = nil, 0
   if H and H.Median then med, mdays = H.Median(id) end
-  if not ah and not de and not med then return end
+  -- (Daniel 21.11.2026, Recipe: Potion of Demonslaying without any line, chosen "graue Hinweiszeile") no price from any
+  -- source: say so, so it is clear Profitdon runs and only the price is missing
+  if not ah and not de and not med then
+    tip:AddLine("|cff8a8f96AH: keine Angebote bekannt|r")
+    return
+  end
   local cut = P.Cut()
   -- (Daniel 06.11.2026, 284 Rough Dynamite in Baganator, chosen "Alles in den Taschen") the AH line counts everything of the
   -- item in the bags ("AH (284):"), an item outside the bags the stack under the mouse; "Sell Price" stays the game's stack

@@ -82,7 +82,7 @@ local Kit = LibStub("DonCore-1.0"):NewModule("Kit", 33)
 ---------------------------------------------------------------------------
 if not Kit then return end -- the same or a newer Kit is loaded already
 local Core = LibStub("DonCore-1.0")
-Kit.VERSION = 32
+Kit.VERSION = 33
 
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 local floor, ceil, max, min, abs, pi, sin, cos = math.floor, math.ceil, math.max, math.min, math.abs, math.pi, math.sin, math.cos

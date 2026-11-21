@@ -1,5 +1,9 @@
 # Profitdon
 
+## 0.2.7
+- Tooltip: hat ein Gegenstand gar keinen AH-Preis (kein Scan, keine Preisgeschichte, kein TSM), steht dort jetzt grau
+  "AH: keine Angebote bekannt" statt nichts.
+
 ## 0.2.6
 - Tooltip: graue Zeile "Median n Tage" mit Tendenz aus der Preisgeschichte, auch für Gegenstände, die im letzten Scan
   fehlen ("nicht im letzten Scan"). Nur zur Anzeige, keine Rechnung nimmt den Median als AH-Preis.
