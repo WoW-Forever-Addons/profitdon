@@ -1,5 +1,9 @@
 # Profitdon
 
+## 0.2.11
+
+- Daten vom 21.11.: Lehrerpreise, Rezepte, Writs und Preisbasis aus den Aufzeichnungen und AH-Scans weiterer Spieler.
+
 ## 0.2.10
 - Kaufen im Auktionshaus: nach einem Kauf kam ein Lua-Fehler (AHPage.lua), die Meldung "Gekauft" steht jetzt wieder farbig.
 - Kaufen: Shift+Linksklick auf einen Gegenstand (Taschen, Chatlink) sucht ihn direkt, solange Kaufen offen ist und keine Chatzeile.
