@@ -212,3 +212,82 @@ ns.On("PLAYER_LOGIN", function() ns.After(5, function() held = Count() end) end)
 ns.On("BAG_UPDATE_DELAYED", function() F.OnBags() end)
 ns.On("PLAYER_REGEN_ENABLED", function() if waiting then F.OnBags() end end)
 ns.On("CURRENCY_DISPLAY_UPDATE", function(_, id, _, change) F.OnCurrency(id, change) end)
+
+---------------------------------------------------------------------------
+-- (Daniel 22.11.2026, Bild Marcy Baker <Inventory Intake>: "crates abgeben derzeit muss ich quest npc anklicken dann das
+-- im bild, um eine kiste abzugeben, können wir das für die crates automatisieren?") the crate turn-ins go by themselves:
+-- the NPC's list (gossip or quest greeting) picks a completable crate quest, the progress page completes it, the reward
+-- page takes the reward. Shift held: nothing happens. Option autoCrate. One right-click on the NPC per crate stays: the
+-- game closes the window after each turn-in and opening it again is protected (InteractUnit).
+--   quests (ATT, waylaid crates.lua): A Sealed Crate 91899-91901 and 91904-91906, Crate Return 93862,
+--   Shipping Label 98247 (A) and 98248 (H)
+---------------------------------------------------------------------------
+F.TURNIN = { [91899] = true, [91900] = true, [91901] = true, [91904] = true, [91905] = true, [91906] = true,
+  [93862] = true, [98247] = true, [98248] = true }
+F.TITLES = { ["A Sealed Crate"] = true, ["Crate Return"] = true, ["Shipping Label"] = true }
+
+local function AutoOn()
+  if ns.Opt("autoCrate") == false then return false end
+  return not (IsShiftKeyDown and ns.Call(IsShiftKeyDown))
+end
+
+-- the NPC's gossip list: the first completable crate quest
+function F.OnGossip()
+  if not AutoOn() then return end
+  local G = C_GossipInfo
+  local list = G and G.GetActiveQuests and ns.Call(G.GetActiveQuests)
+  for _, q in ipairs(type(list) == "table" and list or {}) do
+    local id = ns.Num(q.questID)
+    if id and F.TURNIN[id] and q.isComplete then
+      ns.Call(G.SelectActiveQuest, id)
+      return id
+    end
+  end
+end
+
+-- the quest greeting (the window in Daniel's picture): the first completable crate quest
+function F.OnGreeting()
+  if not AutoOn() then return end
+  local n = GetNumActiveQuests and ns.Num(ns.Call(GetNumActiveQuests)) or 0
+  for i = 1, n do
+    local id = GetActiveQuestID and ns.Num(ns.Call(GetActiveQuestID, i))
+    local title, done = nil, nil
+    if GetActiveTitle then title, done = ns.Call(GetActiveTitle, i) end
+    -- a client without GetActiveQuestID: the quest by its title
+    local crate = id and F.TURNIN[id] or (not id and F.TITLES[title])
+    if crate and done then
+      ns.Call(SelectActiveQuest, i)
+      return id
+    end
+  end
+end
+
+local function ThisQuest()
+  local id = GetQuestID and ns.Num(ns.Call(GetQuestID))
+  return id and F.TURNIN[id] and id or nil
+end
+
+function F.OnProgress()
+  if not AutoOn() then return end
+  local id = ThisQuest()
+  if id and IsQuestCompletable and ns.Call(IsQuestCompletable) then
+    ns.Call(CompleteQuest)
+    return id
+  end
+end
+
+-- the reward: only without a choice between items (the crates give Merchant's Favor)
+function F.OnReward()
+  if not AutoOn() then return end
+  local id = ThisQuest()
+  if not id then return end
+  local choices = GetNumQuestChoices and ns.Num(ns.Call(GetNumQuestChoices)) or 0
+  if choices > 1 then return end
+  ns.Call(GetQuestReward, choices == 1 and 1 or nil)
+  return id
+end
+
+ns.On("GOSSIP_SHOW", function() F.OnGossip() end)
+ns.On("QUEST_GREETING", function() F.OnGreeting() end)
+ns.On("QUEST_PROGRESS", function() F.OnProgress() end)
+ns.On("QUEST_COMPLETE", function() F.OnReward() end)

@@ -1976,6 +1976,7 @@ local OPTS = {
   { "deBonus", "Bonus auf Entzauber-Mats immer einrechnen (ohne Buff)", { 0, 5, 10, 15, 20 }, "pct", "Entzaubern" },
   { "sellGrey", "Händlerknopf verkauft Graues (graue Rüstung und Waffen nicht, wenn das AH mehr zahlt)", nil, nil, "Händler" },
   { "sellVendor", "Händlerknopf verkauft für den Händler Gekauftes und Hergestelltes", nil, nil, "Händler" },
+  { "autoCrate", "Favor-Kisten beim Inventory Intake von selbst abgeben (Shift hält es an)", nil, nil, "Händler" },
   { "tsm", "TSM-Marktwert nutzen, wenn TSM da ist", nil, nil, "Preise und Anzeige" },
   -- (Daniel 20.11.2026) the page Kaufen: the days of the median and the trend (History.lua)
   { "medDays", "Median und Tendenz über so viele Tage", { 3, 5, 7 }, nil, "Preise und Anzeige" },

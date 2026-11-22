@@ -52,6 +52,7 @@ local DEFAULTS = {
   ahHide = true,           -- (Daniel 20.11.2026) Blizzard's auction window stays away, the page Kaufen does its work (AHPage.lua)
   medDays = 5,             -- (Daniel 20.11.2026: "für die letzten 3 bis 5 Tage") the median and trend over so many days (History.lua)
   tooltip = true,          -- (06.11.2026) Profitdon's lines in item tooltips (Händler, AH, Entzaubern)              -- use TSM's DBMarket at run time when TSM is installed (only read, never copied)
+  autoCrate = true,        -- (Daniel 22.11.2026) crate turn-ins at the Inventory Intake NPC go by themselves (Favor.lua)
   minimapButton = true,
 }
 ns.DEFAULTS = DEFAULTS

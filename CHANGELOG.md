@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.20
+- Favor-Kisten geben sich beim Inventory Intake (Marcy Baker, Dokimi) von selbst ab: NPC anklicken genügt, Quest wählen, abschließen und Belohnung nehmen macht Profitdon. Shift beim Anklicken hält es an, Option unter Händler.
+
 ## 0.2.19
 - Unter Händlerpreis: Gegenstände, die der Händler gar nicht annimmt, fallen raus (z. B. Blinding Powder, das Spiel nennt dafür 1s 25c). Lehnt ein Händler etwas ab, das der Profitdon-Knopf verkaufen wollte, merkt Profitdon sich das und zeigt es nicht mehr an.
 
