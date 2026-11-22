@@ -412,6 +412,7 @@ local function SellItem(id, limit)
   for _, s in ipairs(stacks) do
     if done >= MAX_PER_CLICK or sold >= n then break end
     if s.count <= n - sold then
+      ns.Prices.Tried(s.bag, s.slot, id, s.count)
       ns.Call(C_Container.UseContainerItem, s.bag, s.slot)
       s.used, done, sold = true, done + 1, sold + s.count
     end
@@ -560,6 +561,7 @@ function SellClick()
     if done >= MAX_PER_CLICK then break end
     local now = ns.Call(C_Container.GetContainerItemInfo, e.bag, e.slot)
     if type(now) ~= "table" or now.itemID ~= e.id or now.stackCount ~= e.count or now.isLocked then break end
+    ns.Prices.Tried(e.bag, e.slot, e.id, e.count)
     ns.Call(C_Container.UseContainerItem, e.bag, e.slot)
     done, sum = done + 1, sum + e.value -- booked by Ledger.lua like a sale by right click
   end

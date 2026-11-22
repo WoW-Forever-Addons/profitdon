@@ -720,6 +720,7 @@ end)
 -- price that changed): it does not count
 function ns.VendorStale(e)
   local sell, src = ns.Prices.Sell(e.id)
+  if src == "refused" then return true end -- (22.11.2026) the vendor does not buy it (Prices.lua P.Refused)
   if src ~= "game" then return false end
   local unit = e.unit or ((e.count or 0) > 0 and e.ret and e.ret / e.count)
   return unit ~= nil and math.abs(unit - sell) > 0.5

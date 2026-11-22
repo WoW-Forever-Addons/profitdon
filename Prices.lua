@@ -73,7 +73,52 @@ function P.SellDiffText()
   return ("%d Items verglichen, bei %d zahlt Forevers Händler anders als Classic"):format(m.n, m.d or 0)
 end
 
+-- (Daniel 22.11.2026, Bild: Blinding Powder in "Unter Händlerpreis", the game says 1s 25c: "nimmt doch kein Händler an",
+-- tried and refused) items Forever's vendors do not buy although the client names a price: the vendor pays nothing for
+-- them (Sell gives 0, "refused"), so they leave Unter Händlerpreis, the vendor button, the tooltip's vendor line and the
+-- bag value. REFUSED holds the ones seen in the game; ProfitdonDB.noVendor[id] = time learns more on its own: an item the
+-- vendor buttons tried to sell that is still in its slot after the game's "doesn't want" error (P.Tried, Merchant.lua).
+P.REFUSED = { [5530] = true } -- Blinding Powder
+function P.Refused(id)
+  if P.REFUSED[id] then return true end
+  local l = ns.db and ns.db.noVendor
+  return type(l) == "table" and l[id] ~= nil or false
+end
+
+local tried, triedAt = {}, 0
+-- a vendor button is about to sell what lies in bag, slot
+function P.Tried(bag, slot, id, count)
+  local now = GetTime()
+  if now - triedAt > 2 then tried = {} end
+  triedAt = now
+  tried[#tried + 1] = { bag = bag, slot = slot, id = id, count = count }
+end
+local ERR_SEC = 1
+P.ERR_SEC = ERR_SEC
+local checking
+local function CheckRefused()
+  checking = nil
+  local list = tried
+  tried = {}
+  for _, t in ipairs(list) do
+    local now = ns.Call(C_Container.GetContainerItemInfo, t.bag, t.slot)
+    if type(now) == "table" and now.itemID == t.id and (now.stackCount or 1) == t.count and not P.Refused(t.id) then
+      if type(ns.db.noVendor) ~= "table" then ns.db.noVendor = {} end
+      ns.db.noVendor[t.id] = time()
+      local name = ns.ItemInfo(t.id) or ("Item " .. t.id)
+      ns.Print(name .. " kauft der Händler nicht an. Profitdon zeigt es nicht mehr unter Händlerpreis.")
+    end
+  end
+end
+ns.On("UI_ERROR_MESSAGE", function(_, _, msg)
+  if msg == nil or msg ~= _G.ERR_VENDOR_DOESNT_BUY then return end
+  if not tried[1] or GetTime() - triedAt > 2 or checking then return end
+  checking = true
+  ns.After(ERR_SEC, function() ns.Try(CheckRefused) end)
+end)
+
 function P.Sell(id)
+  if P.Refused(id) then return 0, "refused" end
   local _, _, _, _, sell = ns.ItemInfo(id)
   if sell then
     Measure(id, sell)
