@@ -26,6 +26,17 @@ function F.Gain(crate)
   if g then return g, "ATT" end
 end
 
+-- (Daniel 22.11.2026: "und es gibt pro abgabe noch 5s zurück") the turn-in pays money besides the Favor: measured
+-- average (ProfitdonDB.favorMoney[sealed] = { turn-ins, copper }, read with GetRewardMoney on the reward page) or 5s
+F.MONEY = 500
+F.QUEST_SEALED = { [91899] = 248765, [91900] = 248766, [91901] = 248767, [91904] = 248770, [91905] = 248771, [91906] = 248772 }
+function F.Money(crate)
+  local sealed = Data().sealed[crate] or crate
+  local seen = type(ns.db.favorMoney) == "table" and ns.db.favorMoney[sealed]
+  if type(seen) == "table" and (seen[1] or 0) > 0 then return math.floor(seen[2] / seen[1] + 0.5), "gemessen" end
+  return F.MONEY, "geschätzt"
+end
+
 function F.Held()
   local c = C_CurrencyInfo and ns.Call(C_CurrencyInfo.GetCurrencyInfo, Data().currency or 3402)
   return type(c) == "table" and ns.Num(c.quantity) or nil
@@ -58,7 +69,8 @@ function F.Rows()
       e.bundle, e.bid, e.bn, e.bsrc = F.Bundle(c[3] or {})
       e.gain, e.gainSrc = F.Gain(c[1])
       if e.crate and e.bundle then e.total = e.crate + e.bundle end
-      if e.total and e.gain and e.gain > 0 then e.per = e.total / e.gain end
+      e.money, e.moneySrc = F.Money(c[1])
+      if e.total and e.gain and e.gain > 0 then e.per = math.max(0, e.total - e.money) / e.gain end
       if e.crate then e.maxUnit = math.max(e.crate + 2, math.floor(e.crate * 1.25)) end
       out[#out + 1] = e
     end
@@ -328,6 +340,14 @@ function F.OnReward()
   local choices = GetNumQuestChoices and ns.Num(ns.Call(GetNumQuestChoices)) or 0
   if choices > 1 then return end
   Note("Belohnung " .. tostring(id))
+  local sealed = type(id) == "number" and F.QUEST_SEALED[id]
+  local money = sealed and GetRewardMoney and ns.Num(ns.Call(GetRewardMoney))
+  if money then
+    ns.db.favorMoney = type(ns.db.favorMoney) == "table" and ns.db.favorMoney or {}
+    local m = ns.db.favorMoney[sealed] or { 0, 0 }
+    m[1], m[2] = m[1] + 1, m[2] + money
+    ns.db.favorMoney[sealed] = m
+  end
   ns.Call(GetQuestReward, choices == 1 and 1 or nil)
   return id
 end

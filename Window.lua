@@ -603,8 +603,10 @@ local function Rows()
             -- (Daniel 22.11.2026: "was mir bei der anzahl die ich kaufe je gunst kostet") the purchase of these rows over the
             -- Favor they bring; what the bags hold costs nothing here, as in the sum below
             if gain and gain > 0 and e.cost then
-              sub = sub .. (", Einkauf je Gunst %s"):format(M(math.floor(e.cost / (gain * en.runs) + 0.5)))
-              favorCost, favorN = favorCost + e.cost, favorN + gain * en.runs
+              -- (Daniel 22.11.2026) less the money of each turn-in (5s)
+              local net = math.max(0, e.cost - ns.Favor.Money(en.favor) * en.runs)
+              sub = sub .. (", Einkauf je Gunst %s"):format(M(math.floor(net / (gain * en.runs) + 0.5)))
+              favorCost, favorN = favorCost + net, favorN + gain * en.runs
             end
           end
           -- (Daniel 18.11.2026) a Craftsman's Writ: the writ item and its ware, handed in to the customer
@@ -855,6 +857,7 @@ local function Rows()
         { "Kiste im AH" .. (e.crateSrc and (" (" .. e.crateSrc .. ")") or ""), e.crate and M(e.crate) or "nicht im AH" },
         { "Billigstes Bündel", e.bundle and M(e.bundle) or "?" },
         { "Gunst beim Abgeben" .. (e.gainSrc and (" (" .. e.gainSrc .. ")") or ""), e.gain and tostring(e.gain) or "noch unbekannt" },
+        { "Geld beim Abgeben (" .. (e.moneySrc or "geschätzt") .. ")", "-" .. M(e.money or 0) },
         { "Gold je Gunst", e.per and M(math.floor(e.per + 0.5)) or "?" },
       }
       for i = 1, #(ns.G.crates or {}) do

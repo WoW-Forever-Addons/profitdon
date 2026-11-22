@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.22
+- Favor-Kisten: das Geld, das jede Abgabe zurückgibt (5s), zählt jetzt mit, in "Gold je Gunst" und in der Einkaufsliste. Profitdon misst den Betrag bei jeder Abgabe nach.
+
 ## 0.2.21
 - Favor-Kisten: die Abgabe klappt jetzt auch, wenn der NPC die Kistenquest mit gelbem "!" anbietet (annehmen, abschließen, Belohnung). /profit diag zeigt unter crateAuto, was zuletzt passiert ist.
 
