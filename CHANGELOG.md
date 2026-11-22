@@ -1,7 +1,10 @@
 # Profitdon
 
+## 0.2.16
+- Intern: Rucklersuche schreibt Aufrufe ab 8 ms mit. Keine sichtbare Änderung.
+
 ## 0.2.15
-- Intern: langsame Aufrufe (ab 15 ms) werden für die Rucklersuche mitgeschrieben. Keine sichtbare Änderung.
+- Intern: langsame Aufrufe (ab 8 ms) werden für die Rucklersuche mitgeschrieben. Keine sichtbare Änderung.
 
 ## 0.2.14
 - Shift+Linksklick in die Suche von Kaufen klappt jetzt auch aus Baganator und Blizzards Taschen (der Client nimmt einen neueren Weg für Links).

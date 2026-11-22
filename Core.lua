@@ -146,7 +146,7 @@ local issecret = issecretvalue or function() return false end
 -- (60 entries, not saved; DonMonitor's report lists it): addon, context, where the function was registered, ms. Below
 -- the threshold two debugprofilestop calls, no garbage. The game has no debug.getinfo: the place is noted with
 -- debugstack when a listener is registered, for timers only while DonMonitor runs.
-local SLOW_MS, SLOW_MAX = 15, 60
+local SLOW_MS, SLOW_MAX = 8, 200 -- (22.11.2026) 8 ms as DonMonitor's hitch threshold; the report sums them up
 local dps = type(debugprofilestop) == "function" and debugprofilestop or nil
 local fnWhere = setmetatable({}, { __mode = "k" })
 local function Where(level)
