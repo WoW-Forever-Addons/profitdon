@@ -728,7 +728,34 @@ function Cr.WhoMakes(spell)
   end
 end
 
--- unit, src ("vendor", "craft", "ah"), AH quantity, cheapest AH offer, recipe (craft)
+-- (Daniel 22.11.2026, Bild Einkaufsliste Sealed Apprentice Crate, 188 Copper Modulator und 376 Bolts selbst hergestellt:
+-- "wäre es nicht besser ich kaufe die modulatoren und könnte in der zeit essen craften zum verkauf?"; gewählt "Ja,
+-- automatisch") time has a price: the gold an hour of crafting for the vendor brings (the best Gold/h of the list
+-- "Für Händler", kept per realm when that list is worked out). A reagent is made only when made plus the gold of its
+-- casting time stays at or under the AH price. Option timeValue off, or no Gold/h known yet: gold alone as before.
+function Cr.GoldHour()
+  if not ns.Opt("timeValue") then return nil end
+  local h = type(ns.db.goldHour) == "table" and ns.db.goldHour[ns.Realm()]
+  if type(h) == "table" and (h.g or 0) > 0 and time() - (h.t or 0) < 3 * 86400 then return h.g, h end
+end
+function Cr.SetGoldHour(rows)
+  local best
+  for _, v in ipairs(rows or {}) do
+    local g = v.runH and v.runH.gain
+    if g and g > 0 and (not best or g > best.g) then best = { g = g, spell = v.r.spell, item = v.r.item } end
+  end
+  ns.db.goldHour = type(ns.db.goldHour) == "table" and ns.db.goldHour or {}
+  if best then best.t = time() end
+  ns.db.goldHour[ns.Realm()] = best
+end
+-- the gold of sec seconds of casting
+function Cr.TimeGold(sec)
+  local g = Cr.GoldHour()
+  return (g and sec and sec > 0) and math.floor(sec * g / 3600 + 0.5) or 0
+end
+
+-- unit, src ("vendor", "craft", "ah"), AH quantity, cheapest AH offer, recipe (craft), seconds of casting for one unit
+-- made (its steps on the way included), and when bought for the time: the gold one unit made would save and its seconds
 local function Unit(id, depth, seen)
   local low, med, qty = ns.Prices.AH(id)
   local vu = ns.Prices.VendorUnit(id)
@@ -739,22 +766,28 @@ local function Unit(id, depth, seen)
   local list = depth < 3 and Cr.MakesItem(id)
   if list then
     seen[id] = true
-    local best, via
+    local best, via, bestSec, bestEff
     for _, r in ipairs(list) do
       local sum = CanMake(r) and 0 or nil
+      local sec = sum and (Cr.CastTime(r.spell) or 0) or 0
       for _, g in ipairs(sum and r.reag or {}) do
         if seen[g[1]] then sum = nil break end
-        local u = Unit(g[1], depth + 1, seen)
+        local u, s2, _, _, _, t2 = Unit(g[1], depth + 1, seen)
         if not u then sum = nil break end
         sum = sum + u * g[2]
+        if s2 == "craft" then sec = sec + (t2 or 0) * g[2] end
       end
       if sum then
-        local each = math.ceil(sum / Cr.Avg(r))
-        if not best or each < best then best, via = each, r end
+        local avg = Cr.Avg(r)
+        local each, s1 = math.ceil(sum / avg), sec / avg
+        local eff = each + Cr.TimeGold(s1)
+        if not bestEff or eff < bestEff then best, via, bestSec, bestEff = each, r, s1, eff end
       end
     end
     seen[id] = nil
-    if best and (not ah or best <= ah) then return best, "craft", nil, low, via end
+    if best and (not ah or bestEff <= ah) then return best, "craft", nil, low, via, bestSec end
+    -- cheaper made in gold, dearer once the time counts: bought, the row says what making would save
+    if best and ah and best < ah then return ah, "ah", qty, low, nil, nil, { save = ah - best, sec = bestSec, via = via } end
   end
   if ah then return ah, "ah", qty, low end
   if vu then return vu, "vendor", nil, low end
@@ -763,10 +796,10 @@ end
 
 function Cr.ReagentUnit(id)
   local c = Cr.cache
-  if c and c[id] then return unpack(c[id], 1, 5) end
+  if c and c[id] then return unpack(c[id], 1, 7) end
   local res = { Unit(id, 0, {}) }
   if c then c[id] = res end
-  return unpack(res, 1, 5)
+  return unpack(res, 1, 7)
 end
 
 -- one recipe: mats cost, vendor price, profit and ROI at the vendor, what the AH brings after the cut, the disenchant value
@@ -864,6 +897,8 @@ function Cr.Rows(mode)
       end
     end
     table.sort(out, function(a, b) if a.show ~= b.show then return a.show > b.show end return a.r.spell < b.r.spell end)
+    -- (22.11.2026) the best Gold/h of this character's vendor list is the price of an hour of crafting (Cr.GoldHour)
+    if mode == "vendor" then Cr.SetGoldHour(out) end
     return out
   end)
   Cr.cache = nil
@@ -1251,11 +1286,14 @@ function Cr.ShoppingList(entries, grouped)
     end
     -- (Durchsicht 15.11.2026) buy or make was settled at the price of 20 units; many more cost more: 20 at 1s, then 10s,
     -- made 2s, 500 units stayed "buy" at 9s 60c. Settled again at the amount needed.
+    -- (22.11.2026) the casting time counts here too (Cr.GoldHour)
     if src == "ah" and need > 20 and depth < 3 + base then
       local each, r = Route(id)
       local at = each and r and ns.Prices.Buy(id, (taken[id] or 0) + need)
-      if at and each < at then src, unit, via = "craft", each, r end
+      local sec = at and (Cr.Time(r) or 0) / Cr.Avg(r) or 0
+      if at and each + Cr.TimeGold(sec) < at then src, unit, via = "craft", each, r end
     end
+    local timeBuy = src == "ah" and select(7, Cr.ReagentUnit(id)) or nil
     local short, live
     if src == "ah" and need > 0 then
       local u
@@ -1264,7 +1302,7 @@ function Cr.ShoppingList(entries, grouped)
     end
     local e = { id = id, total = total, held = held, way = way > 0 and way or nil, need = need, depth = depth, src = need == 0 and (held < total and "mail" or "stock") or src, unit = unit,
       cost = (src ~= "craft" and unit) and unit * need or nil, maxUnit = unit and math.max(unit + 2, math.ceil(unit * 1.25)) or nil, via = via,
-      short = short or nil, live = live or nil,
+      short = short or nil, live = live or nil, timeBuy = timeBuy,
       forItem = headItem, forRuns = headRuns, forVia = forVia, forSpell = headSpell }
     out[#out + 1] = e
     -- (Daniel 06.11.2026: "unter rough powder eingerückt dann rough stone sehen ... bei den anderen rezepten natürlich auch")

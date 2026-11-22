@@ -1,5 +1,9 @@
 # Profitdon
 
+## 0.2.17
+- Herstellen rechnet die eigene Zeit mit: ein Zwischenteil (z. B. Copper Modulator) wird gekauft, wenn Selbermachen je Stunde weniger spart, als dein bestes Rezept in "Für Händler" je Stunde bringt. Die Zeile nennt beides. Option "Zeit mitrechnen" unter "Was lohnt".
+- Einkaufsliste: Favor-Kisten zeigen, was der Einkauf je Gunst kostet, in der Kistenzeile und in der Summe unten.
+
 ## 0.2.16
 - Intern: Rucklersuche schreibt Aufrufe ab 8 ms mit. Keine sichtbare Änderung.
 

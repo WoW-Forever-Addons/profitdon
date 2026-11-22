@@ -582,6 +582,7 @@ local function Rows()
       -- ein X für das löschen") each recipe on top with its mats indented below, its X takes the whole branch off the list
       local SRC = { vendor = "beim Händler (Knopf Mats kaufen)", ah = "im AH", craft = "selbst herstellen", stock = "in den Taschen", mail = "gekauft" }
       local sumAH, sumVendor, noPrice, wayN, firstHead = 0, 0, 0, 0, nil
+      local favorCost, favorN = 0, 0
       for _, e in ipairs(Cr.ShoppingList(entries, true)) do
         if e.head then
           local en = e.en
@@ -599,6 +600,12 @@ local function Rows()
           if en.favor then
             local gain = ns.Favor.Gain(en.favor)
             sub = ("Favor-Kiste: %d× Kiste füllen%s"):format(en.runs, gain and (", %d Gunst je Kiste, zusammen %d"):format(gain, gain * en.runs) or "")
+            -- (Daniel 22.11.2026: "was mir bei der anzahl die ich kaufe je gunst kostet") the purchase of these rows over the
+            -- Favor they bring; what the bags hold costs nothing here, as in the sum below
+            if gain and gain > 0 and e.cost then
+              sub = sub .. (", Einkauf je Gunst %s"):format(M(math.floor(e.cost / (gain * en.runs) + 0.5)))
+              favorCost, favorN = favorCost + e.cost, favorN + gain * en.runs
+            end
           end
           -- (Daniel 18.11.2026) a Craftsman's Writ: the writ item and its ware, handed in to the customer
           if en.writ then
@@ -727,7 +734,17 @@ local function Rows()
           if e.way and not e.alt then wayN = wayN + 1 end
           if optional then sub = ("freiwillig (%s ist da): nur, wenn du mehr davon selbst herstellen willst"):format((ItemName(e.forVia))) end
           if e.altEach then
-            sub = sub .. (", hergestellt %s je Stück%s"):format(M(e.altEach), e.unit and e.altEach < e.unit and " |cff4fd16b(billiger)|r" or "")
+            local cheaper = e.unit and e.altEach < e.unit
+            sub = sub .. (", hergestellt %s je Stück%s"):format(M(e.altEach),
+              cheaper and (e.timeBuy and " " .. YEL .. "(billiger, kostet aber Zeit)|r" or " |cff4fd16b(billiger)|r") or "")
+          end
+          -- (Daniel 22.11.2026: "wäre es nicht besser ich kaufe die modulatoren und könnte in der zeit essen craften") bought
+          -- because the time of making it is worth more: what making would save an hour against the best Gold/h
+          if e.timeBuy and (e.timeBuy.sec or 0) > 0 and not optional then
+            local g, h = Cr.GoldHour()
+            local perH = math.floor(e.timeBuy.save / e.timeBuy.sec * 3600 + 0.5)
+            sub = sub .. (", selbst herstellen spart nur %s/h, %s bringt %s/h"):format(M(perH),
+              h and h.item and (ItemName(h.item)) or "Herstellen für den Händler", M(g or 0))
           end
           local it = Row(e.id, sub, { need = (not optional) and e.need or "", unit = M(e.unit), cost = (not optional and (e.need or 0) > 0) and M(e.cost) or "" }, e, nil,
             { indent = (e.depth or 0) * 14, sv = { need = e.need, unit = e.unit, cost = e.cost } })
@@ -753,7 +770,8 @@ local function Rows()
         W.shopDone = firstHead
       else
         out[#out + 1] = { kind = "note", warn = short or nil, color = short and C.red or C.title,
-          text = ("Einkauf: AH %s  ·  Händler %s  ·  gesamt %s  ·  dein Gold %s%s%s%s"):format(ns.Money(sumAH), ns.Money(sumVendor), ns.Money(total), ns.Money(gold),
+          text = ("Einkauf: AH %s  ·  Händler %s  ·  gesamt %s%s  ·  dein Gold %s%s%s%s"):format(ns.Money(sumAH), ns.Money(sumVendor), ns.Money(total),
+            favorN > 0 and ("  ·  je Gunst %s (%d Gunst)"):format(ns.Money(math.floor(favorCost / favorN + 0.5)), favorN) or "", ns.Money(gold),
             short and ("  ·  es fehlen " .. ns.Money(total - gold)) or "", noPrice > 0 and ("  ·  %d Mats ohne Preis"):format(noPrice) or "", way) }
         W.shopDone = nil
       end
@@ -1930,6 +1948,8 @@ local OPTS = {
   { "minProfit", "Mindestgewinn", { 1, 5, 10, 25, 50, 100, 500, G }, "money", "Was lohnt" },
   { "minProfitPct", "Mindestgewinn in % vom Einsatz", { 0, 5, 10, 20, 50 }, "pct", "Was lohnt" },
   { "runMin", "Herstellen für den Händler: ein Lauf dauert (Gold je Lauf)", { 15, 30, 60 }, "min", "Was lohnt" },
+  { "timeValue", "Zeit mitrechnen: Zwischenteile kaufen, wenn Selbermachen je Stunde weniger spart als dein bestes Gold/h", nil, nil, "Was lohnt", nil,
+    "Gold/h aus der Liste \"Für Händler\" (einmal öffnen, gilt 3 Tage)" },
   { "demGoodRate", "Absatz gut ab Verkaufsquote", { 20, 30, 40, 50 }, "pct", "Was lohnt" },
   { "demSlowRate", "Absatz zäh ab Verkaufsquote, darunter kaum", { 5, 10, 15, 20 }, "pct", "Was lohnt" },
   { "demDays", "Fürs AH herstellen: Verkäufe von so vielen Tagen", { 1, 2, 3, 5, 7 }, nil, "Was lohnt" },

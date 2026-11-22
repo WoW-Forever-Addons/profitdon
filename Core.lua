@@ -47,6 +47,7 @@ local DEFAULTS = {
   deBonus = 0,             -- (Daniel 15.11.2026) percent more mats per disenchant (a buff), counted into every disenchant value
   deBuff = true,           -- (Daniel 15.11.2026) the buff Boosted Disenchanting on the character counts its bonus by itself
   runMin = 30,             -- (Daniel 18.11.2026) Gold/30 min: a run of crafting for the vendor lasts so many minutes
+  timeValue = true,        -- (Daniel 22.11.2026) casting time costs the best Gold/h: a reagent is bought when making it saves less (Crafts Cr.GoldHour)
   afkCap = false,          -- (16.11.2026) a craft click sends at most 28 minutes of casting (the game's AFK logout)
   ahHide = true,           -- (Daniel 20.11.2026) Blizzard's auction window stays away, the page Kaufen does its work (AHPage.lua)
   medDays = 5,             -- (Daniel 20.11.2026: "für die letzten 3 bis 5 Tage") the median and trend over so many days (History.lua)
