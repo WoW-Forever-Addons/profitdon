@@ -67,6 +67,7 @@ function ns.On(event, fn)
     pcall(frame.RegisterEvent, frame, event)
   end
   table.insert(handlers[event], fn)
+  if ns._NoteWhere then ns._NoteWhere(fn, 2) end -- (22.11.2026) for the slow-call note
 end
 function ns.Fire(event, ...) for _, fn in ipairs(handlers[event] or {}) do ns.Try(fn, event, ...) end end
 
@@ -141,9 +142,46 @@ function ns.Opt(k) local o = ns.db and ns.db.opt return o and o[k] end
 ---------------------------------------------------------------------------
 local issecret = issecretvalue or function() return false end
 
+-- (22.11.2026, Ruckler, DonMonitor) every protected call that takes SLOW_MS or more goes into the global ring DonSlowLog
+-- (60 entries, not saved; DonMonitor's report lists it): addon, context, where the function was registered, ms. Below
+-- the threshold two debugprofilestop calls, no garbage. The game has no debug.getinfo: the place is noted with
+-- debugstack when a listener is registered, for timers only while DonMonitor runs.
+local SLOW_MS, SLOW_MAX = 15, 60
+local dps = type(debugprofilestop) == "function" and debugprofilestop or nil
+local fnWhere = setmetatable({}, { __mode = "k" })
+local function Where(level)
+  if type(debugstack) ~= "function" then return nil end
+  local ok, stack = pcall(debugstack, level, 6, 0)
+  if not ok or type(stack) ~= "string" then return nil end
+  local first
+  for file, line in stack:gsub("\\", "/"):gmatch('([%w_]+%.lua)["%]]*:(%d+)') do
+    local at = file .. ":" .. line
+    if file ~= "Core.lua" then return at end
+    first = first or at
+  end
+  return first
+end
+local function NoteWhere(fn, level)
+  if type(fn) == "function" and not fnWhere[fn] then fnWhere[fn] = Where(level + 1) end
+end
+local function NoteSlow(context, fn, ms)
+  local log = rawget(_G, "DonSlowLog")
+  if type(log) ~= "table" then log = { n = 0 } DonSlowLog = log end
+  local okT, clock = pcall(date, "%H:%M:%S")
+  log.n = (log.n or 0) + 1
+  log[(log.n - 1) % SLOW_MAX + 1] = { n = log.n, t = okT and clock or "?", a = ADDON, c = tostring(context),
+    f = fnWhere[fn] or "?", ms = math.floor(ms * 10 + 0.5) / 10 }
+end
+ns._NoteWhere = NoteWhere
+
 local said = {}
 function ns.Try(fn, ...)
+  local t0 = dps and dps()
   local ok, err = pcall(fn, ...)
+  if t0 then
+    local ms = dps() - t0
+    if ms >= SLOW_MS then local a = ... pcall(NoteSlow, type(a) == "string" and a or "call", fn, ms) end
+  end
   if not ok then
     local where = tostring(err):match("^[^:]+:%d+") or tostring(err)
     if (ns.db and ns.db.debug) or not said[where] then
@@ -170,6 +208,7 @@ function ns.Num(v)
 end
 
 function ns.After(sec, fn)
+  if rawget(_G, "DonMonitorDB") then NoteWhere(fn, 2) end
   if C_Timer and C_Timer.After then C_Timer.After(sec, function() ns.Try(fn) end) else ns.Try(fn) end
 end
 
