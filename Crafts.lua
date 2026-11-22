@@ -1621,11 +1621,15 @@ function Cr.Untrack(spell)
 end
 -- (Daniel 15.11.2026: "Profitdon darf dann gerne die blizzard rezeptliste ausblenden") the tracked recipes stand on the
 -- shopping list, so the game's own list of them at the screen edge (the recipe part of the objective tracker) is made
--- invisible and folded, the way Questdon hides the quest parts there (alpha 0, SetCollapsed; nothing is hooked). The
--- option hideRecipeList off brings it back. The part's name is not in data/wowui (Blizzard_ObjectiveTracker is not
--- extracted): the known names are tried, /profit diag says which was found (line recipeList). Never in combat.
+-- invisible (alpha 0, nothing is hooked). The option hideRecipeList off brings it back. The part's name is not in
+-- data/wowui (Blizzard_ObjectiveTracker is not extracted): the known names are tried, /profit diag says which was
+-- found (line recipeList). Never in combat.
+-- (22.11.2026, Daniel's error "GetAuraDataByIndex(): Auras cannot be accessed when secret while tainted by 'Profitdon'"
+-- in Blizzard_MawBuffs from the scenario part of the tracker) the part is no longer folded: SetCollapsed writes
+-- self.isCollapsed and marks the tracker dirty, Blizzard's next tracker update reads those values and runs tainted.
+-- Only SetAlpha (a frame method, no Lua field of Blizzard's) is used; the invisible part keeps its height.
 Cr.RECIPE_PARTS = { "ProfessionsRecipeTracker", "ProfessionsRecipeObjectiveTracker", "ProfessionsRecipeTrackerModule" }
-local partHidden, partFolded, headHidden
+local partHidden, headHidden
 function Cr.ApplyRecipeList()
   if not ns.db or ns.Call(InCombatLockdown) then return end
   local hide = ns.Opt("hideRecipeList") ~= false
@@ -1635,19 +1639,9 @@ function Cr.ApplyRecipeList()
     local m = rawget(_G, n)
     if type(m) == "table" and type(m.SetAlpha) == "function" then
       found = found or n
-      if hide then
-        pcall(m.SetAlpha, m, 0)
-        if type(m.SetCollapsed) == "function" and type(m.IsCollapsed) == "function" then
-          local ok, folded = pcall(m.IsCollapsed, m)
-          if ok and not folded then partFolded = partFolded or {} partFolded[n] = true pcall(m.SetCollapsed, m, true) end
-        end
-      else
-        pcall(m.SetAlpha, m, 1)
-        if partFolded and partFolded[n] and type(m.SetCollapsed) == "function" then pcall(m.SetCollapsed, m, false) end
-      end
+      pcall(m.SetAlpha, m, hide and 0 or 1)
     end
   end
-  if not hide then partFolded = nil end
   partHidden = hide and found ~= nil
   -- (Daniel 15.11.2026, Bild "All Objectives": "kannst du das auch noch ausblenden?") with the recipes gone only the
   -- head of Blizzard's tracker stood there. It goes too while nothing else shows below it: every other part of the

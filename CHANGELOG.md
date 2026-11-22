@@ -1,5 +1,9 @@
 # Profitdon
 
+## 0.2.12
+
+- Fehler behoben: "GetAuraDataByIndex(): Auras cannot be accessed when secret while tainted by 'Profitdon'" aus Blizzards Questtracker (Szenario, Maw Buffs). Profitdon klappt Blizzards Rezeptliste nicht mehr zu, sondern macht sie nur unsichtbar.
+
 ## 0.2.11
 
 - Daten vom 21.11.: Lehrerpreise, Rezepte, Writs und Preisbasis aus den Aufzeichnungen und AH-Scans weiterer Spieler.
