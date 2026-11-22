@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.23
+- Fehler behoben: Shift über einem fremden Fenster (z. B. beim Anklicken eines NPCs) meldete "Window.lua:1639: attempt to index field 'item'".
+
 ## 0.2.22
 - Favor-Kisten: das Geld, das jede Abgabe zurückgibt (5s), zählt jetzt mit, in "Gold je Gunst" und in der Einkaufsliste. Profitdon misst den Betrag bei jeder Abgabe nach.
 

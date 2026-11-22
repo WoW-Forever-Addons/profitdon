@@ -1639,7 +1639,9 @@ function ns.WindowShift(down, items)
   end
   local tt = GameTooltip
   local owner = tt and tt.IsShown and tt:IsShown() and tt.GetOwner and tt:GetOwner()
-  if owner and owner.item and owner.item.tipFull and owner.GetScript then
+  -- (22.11.2026, Daniel: "Window.lua:1639: attempt to index field 'item' (a number value)") a tooltip of another addon's or
+  -- Blizzard's frame whose field item is a number: only Profitdon's rows (a table) are shown again
+  if owner and type(owner.item) == "table" and owner.item.tipFull and owner.GetScript then
     local enter = owner:GetScript("OnEnter")
     if enter then pcall(enter, owner) end
   end
