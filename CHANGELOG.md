@@ -1,5 +1,9 @@
 # Profitdon
 
+## 0.2.24
+- Favor-Kisten: jede Abgabe gibt 50c je Gunst zurück (2s 50c bis 10s), das rechnet Profitdon jetzt für jede Kiste ein, bis es selbst gemessen hat.
+- Meldung "That bag is full.": /profit diag zeigt unter bagFull, was in dem Moment los war (letztes Herstellen, Taschen mit freien Plätzen und Art, Cursor, offene Fenster).
+
 ## 0.2.23
 - Fehler behoben: Shift über einem fremden Fenster (z. B. beim Anklicken eines NPCs) meldete "Window.lua:1639: attempt to index field 'item'".
 

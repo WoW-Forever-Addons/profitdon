@@ -1599,6 +1599,7 @@ function Cr.CraftNow(r, n)
     end
     return false, ("Erst das Fenster %s öffnen."):format(Cr.ProfName(r.prof))
   end
+  Cr.lastCraft = { spell = r.spell, item = r.item, n = n, t = GetTime() }
   local ok = pcall(T.CraftRecipe, r.spell, n)
   if not ok then return false, "Herstellen abgelehnt." end
   return true
@@ -2008,3 +2009,44 @@ function Cr.ProfRows(prof, mode)
   return rows, st.price, st
 end
 Cr.ProfRows = Memo("ProfRows", Cr.ProfRows)
+
+---------------------------------------------------------------------------
+-- (Daniel 22.11.2026, Bild "That bag is full." beim Herstellen über das Herstellfenster, 30 Plätze frei, es läuft weiter,
+-- "ist erst neu seit heute") Profitdon puts nothing into bags while crafting; to find who does, the moment of the message
+-- is kept for /profit diag (bagFull): the last craft of the window, every bag with its free slots and its kind (0 any
+-- item, else a profession bag), the cursor and what was on screen. Diagnosis only, nothing changes.
+---------------------------------------------------------------------------
+function Cr.NoteBagFull()
+  local parts = {}
+  local lc = Cr.lastCraft
+  if lc then
+    parts[#parts + 1] = ("Herstellen %d× %s vor %.0f s"):format(lc.n or 0, ns.ItemInfo(lc.item) or tostring(lc.item), GetTime() - lc.t)
+  else
+    parts[#parts + 1] = "kein Herstellen über Profitdon"
+  end
+  local bags = {}
+  for bag = 0, ns.LASTBAG or 4 do
+    local slots = ns.Num(ns.Call(C_Container.GetContainerNumSlots, bag)) or 0
+    if slots > 0 then
+      local free, kind = ns.Call(C_Container.GetContainerNumFreeSlots, bag)
+      bags[#bags + 1] = ("%d:%s/%d%s"):format(bag, tostring(ns.Num(free) or "?"), slots, (ns.Num(kind) or 0) ~= 0 and (" Art " .. kind) or "")
+    end
+  end
+  parts[#parts + 1] = "Taschen " .. table.concat(bags, " ")
+  local ck, cid = nil, nil
+  if GetCursorInfo then ck, cid = ns.Call(GetCursorInfo) end
+  if ck then parts[#parts + 1] = ("Cursor %s %s"):format(tostring(ck), tostring(cid)) end
+  local open = {}
+  for _, name in ipairs({ "MerchantFrame", "BankFrame", "MailFrame", "TradeFrame", "AuctionHouseFrame", "ProfessionsFrame", "TradeSkillFrame", "LootFrame" }) do
+    local f = _G[name]
+    if f and f.IsShown and f:IsShown() then open[#open + 1] = name end
+  end
+  if open[1] then parts[#parts + 1] = "offen " .. table.concat(open, ",") end
+  local casting = UnitCastingInfo and ns.Call(UnitCastingInfo, "player")
+  if casting then parts[#parts + 1] = "zaubert " .. tostring(casting) end
+  ns.db.bagFullN = (ns.db.bagFullN or 0) + 1
+  ns.Fact("bagFull", ("%d× gesehen, zuletzt: %s"):format(ns.db.bagFullN, table.concat(parts, ", ")))
+end
+ns.On("UI_ERROR_MESSAGE", function(_, _, msg)
+  if msg ~= nil and msg == _G.ERR_BAG_FULL then Cr.NoteBagFull() end
+end)

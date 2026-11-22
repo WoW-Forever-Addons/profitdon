@@ -27,14 +27,16 @@ function F.Gain(crate)
 end
 
 -- (Daniel 22.11.2026: "und es gibt pro abgabe noch 5s zurück") the turn-in pays money besides the Favor: measured
--- average (ProfitdonDB.favorMoney[sealed] = { turn-ins, copper }, read with GetRewardMoney on the reward page) or 5s
-F.MONEY = 500
+-- average (ProfitdonDB.favorMoney[sealed] = { turn-ins, copper }, read with GetRewardMoney on the reward page), else
+-- 50c per Favor (Daniel's chat, one crate of each kind: 5 Favor 2s 50c, 10 Favor 5s, 15 Favor 7s 50c, 20 Favor 10s)
+F.MONEY_PER_FAVOR = 50
 F.QUEST_SEALED = { [91899] = 248765, [91900] = 248766, [91901] = 248767, [91904] = 248770, [91905] = 248771, [91906] = 248772 }
 function F.Money(crate)
   local sealed = Data().sealed[crate] or crate
   local seen = type(ns.db.favorMoney) == "table" and ns.db.favorMoney[sealed]
   if type(seen) == "table" and (seen[1] or 0) > 0 then return math.floor(seen[2] / seen[1] + 0.5), "gemessen" end
-  return F.MONEY, "geschätzt"
+  local g = F.Gain(crate)
+  return (g or 0) * F.MONEY_PER_FAVOR, "50c je Gunst"
 end
 
 function F.Held()

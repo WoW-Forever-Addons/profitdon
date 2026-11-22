@@ -857,7 +857,7 @@ local function Rows()
         { "Kiste im AH" .. (e.crateSrc and (" (" .. e.crateSrc .. ")") or ""), e.crate and M(e.crate) or "nicht im AH" },
         { "Billigstes Bündel", e.bundle and M(e.bundle) or "?" },
         { "Gunst beim Abgeben" .. (e.gainSrc and (" (" .. e.gainSrc .. ")") or ""), e.gain and tostring(e.gain) or "noch unbekannt" },
-        { "Geld beim Abgeben (" .. (e.moneySrc or "geschätzt") .. ")", "-" .. M(e.money or 0) },
+        { "Geld beim Abgeben (" .. (e.moneySrc or "50c je Gunst") .. ")", "-" .. M(e.money or 0) },
         { "Gold je Gunst", e.per and M(math.floor(e.per + 0.5)) or "?" },
       }
       for i = 1, #(ns.G.crates or {}) do
