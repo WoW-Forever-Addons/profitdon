@@ -84,6 +84,8 @@ function Wr.Rows()
   local Cr = ns.Crafts
   local outer = Cr.cache
   Cr.cache = outer or {}
+  -- (22.11.2026, Ruckler) the bags once for all writs (ns.BagCount walked through all bag slots for every writ of the list)
+  local bags = ns.Bags and ns.Bags() or {}
   local ok, err = pcall(function()
     for _, w in ipairs(List()) do
       if w[7] == "" or w[7] == side then
@@ -93,7 +95,7 @@ function Wr.Rows()
         e.writ, e.writSrc = ns.AHPrice(w[2])
         local unit, src = Cr.ReagentUnit(w[3])
         if unit then e.wareCost, e.wareSrc = unit * w[4], src end
-        e.held = ns.BagCount and ns.BagCount(w[2]) or 0
+        e.held = bags[w[2]] or 0
         e.pouch, e.pouchSrc = Wr.Pouch(w[5])
         e.rep = Wr.REP[w[5]]
         local writ = e.held > 0 and 0 or e.writ

@@ -135,14 +135,33 @@ function F.Forget() memo = nil end
 ---------------------------------------------------------------------------
 local held, lost, gained = nil, {}, nil
 
+-- (22.11.2026, Ruckler, DonMonitor report: BAG_UPDATE_DELAYED Favor.lua:185 avg 32 ms, max 52 ms, with every loot and
+-- every craft) the sealed crates were counted with ns.BagCount once per crate ID: 15 walks through all bag slots on each
+-- bag change. One walk now, only the slot's item ID is looked at (GetContainerItemID where the client has it, no table
+-- per slot); the slot's count is read for a sealed crate only.
 local function Count()
   local t = {}
-  for id = SEALED_LO, SEALED_HI do
-    local n = ns.BagCount and ns.BagCount(id) or 0
-    if n > 0 then t[id] = n end
+  local C = C_Container
+  if not C then return t end
+  local idAt = C.GetContainerItemID
+  for bag = 0, ns.LASTBAG or 4 do
+    local slots = ns.Num(ns.Call(C.GetContainerNumSlots, bag)) or 0
+    for slot = 1, slots do
+      local id, info
+      if idAt then id = ns.Num(ns.Call(idAt, bag, slot))
+      else
+        info = ns.Call(C.GetContainerItemInfo, bag, slot)
+        id = type(info) == "table" and ns.Num(info.itemID) or nil
+      end
+      if id and id >= SEALED_LO and id <= SEALED_HI then
+        info = info or ns.Call(C.GetContainerItemInfo, bag, slot)
+        t[id] = (t[id] or 0) + (type(info) == "table" and ns.Num(info.stackCount) or 1)
+      end
+    end
   end
   return t
 end
+F._Count = Count -- (tests)
 
 local function Match()
   if not gained or #lost == 0 then return end
@@ -162,7 +181,13 @@ local function Match()
   if now - gained.t > 5 then gained = nil end
 end
 
+-- (22.11.2026, Ruckler) in a fight the bags are not counted (loot changes them all the time, no crate is handed in
+-- there): once after it (PLAYER_REGEN_ENABLED). While a Favor gain waits for its crate the count runs all the same.
+local waiting
 function F.OnBags()
+  if gained and GetTime() - gained.t > 5 then gained = nil end -- too old for any crate that leaves from now on (Match: 5 s)
+  if not gained and ns.Call(InCombatLockdown) then waiting = true return end
+  waiting = nil
   local now = Count()
   if held then
     for id, n in pairs(held) do
@@ -178,9 +203,12 @@ function F.OnCurrency(id, change)
   if ns.Num(id) ~= (Data().currency or 3402) or (ns.Num(change) or 0) <= 0 then return end
   gained = { n = ns.Num(change), t = GetTime() }
   Match()
-  if gained then ns.After(1, function() ns.Try(F.OnBags) end) end
+  if gained then ns.After(1, F.OnBags) end
 end
 
+-- (22.11.2026) the handlers run inside ns.Try already (Core.lua): a second ns.Try around them put every slow call into
+-- the slow-call log twice, the second time without a place ("call ?")
 ns.On("PLAYER_LOGIN", function() ns.After(5, function() held = Count() end) end)
-ns.On("BAG_UPDATE_DELAYED", function() ns.Try(F.OnBags) end)
-ns.On("CURRENCY_DISPLAY_UPDATE", function(_, id, _, change) ns.Try(F.OnCurrency, id, change) end)
+ns.On("BAG_UPDATE_DELAYED", function() F.OnBags() end)
+ns.On("PLAYER_REGEN_ENABLED", function() if waiting then F.OnBags() end end)
+ns.On("CURRENCY_DISPLAY_UPDATE", function(_, id, _, change) F.OnCurrency(id, change) end)

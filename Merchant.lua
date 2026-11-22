@@ -355,6 +355,10 @@ local function Offer()
   end
   for _, e in ipairs(Plan()) do add(e.id, e.count, e.why) end
   local products = ns.Crafts and ns.Crafts.Products() or {}
+  -- (22.11.2026, Ruckler, DonMonitor report: MERCHANT_SHOW Merchant.lua:719 avg 79 ms) the hide rule asked ns.BagCount for
+  -- every slot with a product: a walk through all bags per slot. The counts of all items once (ns.Bags), when first needed
+  local counts
+  local function Have(id) counts = counts or ns.Bags() return counts[id] or 0 end
   for bag = 0, ns.LASTBAG do
     local slots = ns.Num(ns.Call(C_Container.GetContainerNumSlots, bag)) or 0
     for slot = 1, slots do
@@ -363,7 +367,7 @@ local function Offer()
       -- (Daniel 17.11.2026, Bild: Gyromatic Micro-Adjustor, Arclight Spanner, Philosopher's Stone offered) the tools stay:
       -- the same hide rule as Verkaufen (ProfitdonDB.sellHide, tools while only one is in the bags)
       if id and products[id] and not info.hasNoValue and (byId[id] == nil or byId[id].why == "product")
-        and not (ns.SellHiddenAt and ns.SellHiddenAt(id, ns.BagCount(id))) then
+        and not (ns.SellHiddenAt and ns.SellHiddenAt(id, Have(id))) then
         local sell = ns.Prices.Sell(id)
         if sell and sell > 0 then add(id, ns.Num(info.stackCount) or 1, "product") end
       end

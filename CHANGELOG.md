@@ -1,5 +1,9 @@
 # Profitdon
 
+## 0.2.18
+- Ruckler bei Beute und beim Herstellen behoben: die Favor-Kisten werden mit einem Taschendurchlauf statt 15 gezählt, im Kampf gar nicht (einmal danach).
+- Händlerfenster und Writ-Reiter lesen die Taschen einmal statt je Zeile. Der Minuten-Schnappschuss der Auswertung wartet im Kampf.
+
 ## 0.2.17
 - Herstellen rechnet die eigene Zeit mit: ein Zwischenteil (z. B. Copper Modulator) wird gekauft, wenn Selbermachen je Stunde weniger spart, als dein bestes Rezept in "Für Händler" je Stunde bringt. Die Zeile nennt beides. Option "Zeit mitrechnen" unter "Was lohnt".
 - Einkaufsliste: Favor-Kisten zeigen, was der Einkauf je Gunst kostet, in der Kistenzeile und in der Summe unten.

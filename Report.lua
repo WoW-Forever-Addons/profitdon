@@ -235,6 +235,10 @@ local lastSnap = 0
 function R.Snapshot(force)
   if not ns.db then return end
   if not force and GetTime() - lastSnap < 60 then return end
+  -- (22.11.2026, Ruckler, DonMonitor report: "call ?" up to 110 ms while questing) the snapshot walks through the bags
+  -- and prices every item: not in a fight (gold and loot ask for it all the time there), once after it
+  if not force and ns.Call(InCombatLockdown) then R.snapWaits = true return end
+  R.snapWaits = nil
   lastSnap = GetTime()
   local r = Store()
   local gold = ns.Num(ns.Call(GetMoney))
@@ -442,6 +446,7 @@ ns.On("PLAYER_LOGIN", function() ns.After(15, function() R.MoveCraftSales() end)
 ns.On("PLAYER_MONEY", function() R.Snapshot() end)
 ns.On("PLAYER_ENTERING_WORLD", function() ns.After(5, function() R.Snapshot(true) end) end)
 ns.On("BAG_UPDATE_DELAYED", function() ns.WhenIdle("Goldverlauf", R.Snapshot) end)
+ns.On("PLAYER_REGEN_ENABLED", function() if R.snapWaits then ns.WhenIdle("Goldverlauf", R.Snapshot) end end)
 
 ---------------------------------------------------------------------------
 -- The page (book tab "Auswertung"), built from the kit like Golddon's overview

@@ -382,6 +382,7 @@ local function RunIdle()
 end
 function ns.WhenIdle(key, fn, delay)
   idleWork[key] = fn
+  NoteWhere(fn, 2) -- (22.11.2026) the slow-call log names each idle job's place, not the first caller's
   if not idleArmed then idleArmed = true ns.After(delay or 0.3, RunIdle) end
 end
 ns.dataVer = 0
@@ -495,7 +496,7 @@ function ns.OnWaySettle()
   end
   wayPrev = bags
 end
-ns.On("BAG_UPDATE_DELAYED", function() ns.Try(ns.OnWaySettle) end)
+ns.On("BAG_UPDATE_DELAYED", function() ns.OnWaySettle() end) -- (22.11.2026) handlers run in ns.Try already
 
 function ns.FreeSlots()
   local n = 0
