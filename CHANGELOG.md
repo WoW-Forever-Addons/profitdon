@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.21
+- Favor-Kisten: die Abgabe klappt jetzt auch, wenn der NPC die Kistenquest mit gelbem "!" anbietet (annehmen, abschließen, Belohnung). /profit diag zeigt unter crateAuto, was zuletzt passiert ist.
+
 ## 0.2.20
 - Favor-Kisten geben sich beim Inventory Intake (Marcy Baker, Dokimi) von selbst ab: NPC anklicken genügt, Quest wählen, abschließen und Belohnung nehmen macht Profitdon. Shift beim Anklicken hält es an, Option unter Händler.
 

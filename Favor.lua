@@ -231,21 +231,42 @@ local function AutoOn()
   return not (IsShiftKeyDown and ns.Call(IsShiftKeyDown))
 end
 
--- the NPC's gossip list: the first completable crate quest
+-- (22.11.2026, Daniel: "scheint nicht zu funktionieren"; in his picture "A Sealed Crate" carries a yellow "!") the crate
+-- quest is offered (available), not in the log: it is accepted at the NPC and completes at once. So the lists take an
+-- offered crate quest as well as a completable one, QUEST_DETAIL accepts it, and every step also knows the quest by its
+-- title (in case Forever's IDs differ from ATT's). What it saw goes to /profit diag (crateAuto).
+local function IsCrate(id, title)
+  return (id and F.TURNIN[id]) or (title and F.TITLES[title]) or false
+end
+local function Note(v) ns.Fact("crateAuto", v) end
+
+-- the NPC's gossip list: a completable or an offered crate quest
 function F.OnGossip()
   if not AutoOn() then return end
   local G = C_GossipInfo
-  local list = G and G.GetActiveQuests and ns.Call(G.GetActiveQuests)
-  for _, q in ipairs(type(list) == "table" and list or {}) do
+  if not G then return end
+  local act = G.GetActiveQuests and ns.Call(G.GetActiveQuests)
+  for _, q in ipairs(type(act) == "table" and act or {}) do
     local id = ns.Num(q.questID)
-    if id and F.TURNIN[id] and q.isComplete then
+    if IsCrate(id, q.title) and q.isComplete then
+      Note("Gossip: abgeben " .. tostring(id or q.title))
       ns.Call(G.SelectActiveQuest, id)
       return id
     end
   end
+  local av = G.GetAvailableQuests and ns.Call(G.GetAvailableQuests)
+  for _, q in ipairs(type(av) == "table" and av or {}) do
+    local id = ns.Num(q.questID)
+    if IsCrate(id, q.title) then
+      Note("Gossip: annehmen " .. tostring(id or q.title))
+      ns.Call(G.SelectAvailableQuest, id)
+      return id
+    end
+  end
+  Note(("Gossip: keine Kistenquest (%d laufend, %d angeboten)"):format(type(act) == "table" and #act or 0, type(av) == "table" and #av or 0))
 end
 
--- the quest greeting (the window in Daniel's picture): the first completable crate quest
+-- the quest greeting (the window in Daniel's picture): a completable or an offered crate quest
 function F.OnGreeting()
   if not AutoOn() then return end
   local n = GetNumActiveQuests and ns.Num(ns.Call(GetNumActiveQuests)) or 0
@@ -253,24 +274,47 @@ function F.OnGreeting()
     local id = GetActiveQuestID and ns.Num(ns.Call(GetActiveQuestID, i))
     local title, done = nil, nil
     if GetActiveTitle then title, done = ns.Call(GetActiveTitle, i) end
-    -- a client without GetActiveQuestID: the quest by its title
-    local crate = id and F.TURNIN[id] or (not id and F.TITLES[title])
-    if crate and done then
+    if IsCrate(id, title) and done then
+      Note("Gruß: abgeben " .. tostring(id or title))
       ns.Call(SelectActiveQuest, i)
-      return id
+      return id or title
     end
   end
+  local m = GetNumAvailableQuests and ns.Num(ns.Call(GetNumAvailableQuests)) or 0
+  for i = 1, m do
+    local id = GetAvailableQuestInfo and ns.Num(select(5, ns.Call(GetAvailableQuestInfo, i)))
+    local title = GetAvailableTitle and ns.Call(GetAvailableTitle, i)
+    if IsCrate(id, title) then
+      Note("Gruß: annehmen " .. tostring(id or title))
+      ns.Call(SelectAvailableQuest, i)
+      return id or title
+    end
+  end
+  Note(("Gruß: keine Kistenquest (%d laufend, %d angeboten)"):format(n, m))
 end
 
 local function ThisQuest()
   local id = GetQuestID and ns.Num(ns.Call(GetQuestID))
-  return id and F.TURNIN[id] and id or nil
+  local title = GetTitleText and ns.Call(GetTitleText)
+  if id and F.TURNIN[id] then return id end
+  if title and F.TITLES[title] then return title end
+end
+
+-- the offer of a crate quest: accept it
+function F.OnDetail()
+  if not AutoOn() then return end
+  local id = ThisQuest()
+  if not id then return end
+  Note("annehmen " .. tostring(id))
+  ns.Call(AcceptQuest)
+  return id
 end
 
 function F.OnProgress()
   if not AutoOn() then return end
   local id = ThisQuest()
   if id and IsQuestCompletable and ns.Call(IsQuestCompletable) then
+    Note("abschließen " .. tostring(id))
     ns.Call(CompleteQuest)
     return id
   end
@@ -283,11 +327,13 @@ function F.OnReward()
   if not id then return end
   local choices = GetNumQuestChoices and ns.Num(ns.Call(GetNumQuestChoices)) or 0
   if choices > 1 then return end
+  Note("Belohnung " .. tostring(id))
   ns.Call(GetQuestReward, choices == 1 and 1 or nil)
   return id
 end
 
 ns.On("GOSSIP_SHOW", function() F.OnGossip() end)
 ns.On("QUEST_GREETING", function() F.OnGreeting() end)
+ns.On("QUEST_DETAIL", function() F.OnDetail() end)
 ns.On("QUEST_PROGRESS", function() F.OnProgress() end)
 ns.On("QUEST_COMPLETE", function() F.OnReward() end)
