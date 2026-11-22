@@ -1,5 +1,10 @@
 # Profitdon
 
+## 0.2.13
+
+- Tooltip: Preise aus den mitgelieferten Scans gelten jetzt für den Realm, egal unter welchem Namen das Spiel ihn meldet (EU4 Realm 7, EU5 Realm 1 oder leer). Vorher fehlte dann jeder Preis.
+- Tooltip: grüne Ausrüstung ohne bekannten Preis zeigt wieder "AH: keine Angebote bekannt".
+
 ## 0.2.12
 
 - Fehler behoben: "GetAuraDataByIndex(): Auras cannot be accessed when secret while tainted by 'Profitdon'" aus Blizzards Questtracker (Szenario, Maw Buffs). Profitdon klappt Blizzards Rezeptliste nicht mehr zu, sondern macht sie nur unsichtbar.

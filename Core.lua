@@ -212,14 +212,13 @@ end
 -- (21.11.2026, Laptop-Daten: since 21.11. the game gave an empty realm name, scans and characters landed under "|A" and
 -- "Mae-") the realm name, else the normalized one, else the last one seen (ProfitdonDB.realmName), else the one realm of
 -- Data/PriceSeed.lua; "?" only when nothing is known
+-- (Daniel 22.11.2026: "Es gibt nur einen realm") several names in the seed are the same realm: the newest one
 local function SeedRealm()
-  local one
-  for k in pairs(ns.PRICE_SEED or {}) do
+  local one, oneDay
+  for k, v in pairs(ns.PRICE_SEED or {}) do
     local r = type(k) == "string" and k:match("^(.+)|[ANH]$")
-    if r then
-      if one and one ~= r then return nil end
-      one = r
-    end
+    local day = type(v) == "table" and tonumber(v.day) or 0
+    if r and (not one or day > oneDay or (day == oneDay and r > one)) then one, oneDay = r, day end
   end
   return one
 end

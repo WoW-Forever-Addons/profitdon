@@ -232,16 +232,38 @@ end
 -- (Daniel 20.11.2026: "etliche Tage mit Auktionshaus-Scans ... die könnte man doch jetzt erstmal nehmen") the days of
 -- the scans kept in the workshop's data store (Data/PriceSeed.lua, tools/profitdon/build_price_seed.py) fill the days the
 -- own history has no value for; older than KEEP days they drop out by themselves
+-- (Daniel 22.11.2026, Wolf Bracers without any price: "Es gibt nur einen realm") Forever has one AH per side, the game
+-- names it differently ("EU4 Realm 7 PvE", "EU5 Realm 1 PvE", "" since 21.11.), so the seed of every realm key of the
+-- same side counts: the own key first, then the others, the newest first
+local seedList, seedListOf, seedListKey = nil, nil, nil
+local function SeedsFor(key)
+  local S = ns.PRICE_SEED
+  if type(S) ~= "table" then return {} end
+  if seedListOf == S and seedListKey == key then return seedList end
+  local side = type(key) == "string" and key:match("|([ANH])$")
+  local list = {}
+  for k, v in pairs(S) do
+    if type(v) == "table" and type(v.d) == "table" and (k == key or (side and type(k) == "string" and k:match("|([ANH])$") == side)) then
+      list[#list + 1] = { k == key and 1 or 0, tonumber(v.day) or 0, v }
+    end
+  end
+  table.sort(list, function(a, b) if a[1] ~= b[1] then return a[1] > b[1] end return a[2] > b[2] end)
+  for i, e in ipairs(list) do list[i] = e[3] end
+  seedList, seedListOf, seedListKey = list, S, key
+  return list
+end
 function H.SeedDays(id, key, out)
-  local seed = ns.PRICE_SEED and ns.PRICE_SEED[key or ns.Prices.StoreKey()]
-  local s = seed and seed.d and seed.d[id]
-  if not s then return out end
-  local shift = H.Today() - (tonumber(seed.day) or 0)
-  if shift < 0 then return out end
-  for i, v in ipairs(Nums(s)) do
-    local ago = shift + i - 1
-    if ago >= H.KEEP then break end
-    if v and out[ago] == nil then out[ago] = v end
+  local today = H.Today()
+  for _, seed in ipairs(SeedsFor(key or ns.Prices.StoreKey())) do
+    local s = seed.d[id]
+    local shift = today - (tonumber(seed.day) or 0)
+    if s and shift >= 0 then
+      for i, v in ipairs(Nums(s)) do
+        local ago = shift + i - 1
+        if ago >= H.KEEP then break end
+        if v and out[ago] == nil then out[ago] = v end
+      end
+    end
   end
   return out
 end

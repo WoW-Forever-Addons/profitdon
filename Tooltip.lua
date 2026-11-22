@@ -71,11 +71,13 @@ local function Lines(tip, id)
   -- source: say so, so it is clear Profitdon runs and only the price is missing
   -- (Daniel 21.11.2026: "bei soulbound den tooltip weg") not for an item that binds when picked up or is a quest item:
   -- it never reaches the AH (GetItemInfo's 14th value, bindType 1 or 4)
-  if not ah and not de and not med then
+  -- (Daniel 22.11.2026, Wolf Bracers: a green item with a disenchant value but no price showed nothing at all) the grey
+  -- line also when only the disenchant value is known
+  if not ah and not med then
     local GI = (C_Item and C_Item.GetItemInfo) or GetItemInfo
     local bind = select(14, ns.Call(GI, id))
     if bind ~= 1 and bind ~= 4 then tip:AddLine("|cff8a8f96AH: keine Angebote bekannt|r") end
-    return
+    if not de then return end
   end
   local cut = P.Cut()
   -- (Daniel 06.11.2026, 284 Rough Dynamite in Baganator, chosen "Alles in den Taschen") the AH line counts everything of the
