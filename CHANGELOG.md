@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.14
+- Shift+Linksklick in die Suche von Kaufen klappt jetzt auch aus Baganator und Blizzards Taschen (der Client nimmt einen neueren Weg für Links).
+
 ## 0.2.13
 
 - Tooltip: Preise aus den mitgelieferten Scans gelten jetzt für den Realm, egal unter welchem Namen das Spiel ihn meldet (EU4 Realm 7, EU5 Realm 1 oder leer). Vorher fehlte dann jeder Preis.

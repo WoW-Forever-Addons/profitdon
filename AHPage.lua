@@ -536,19 +536,34 @@ end
 -- (Daniel 21.11.2026: "shift + linksklick auf ein item in der bag, dann soll es in der ah suche auftauchen") a shift
 -- click on an item (bags, Baganator, chat links) ends in ChatEdit_InsertLink; while Kaufen is on the screen and no chat
 -- line is open, its name is searched there. Blizzard's own window does the same with its hidden search bar, harmless.
+local lastLink, lastAt
 function ns.AHLinkClick(text)
   if type(text) ~= "string" or not text:find("|Hitem:", 1, true) then return false end
   local p = ns.ahPage
   if not (p and p.IsVisible and p:IsVisible()) then return false end
-  local active = _G.ChatEdit_GetActiveWindow and _G.ChatEdit_GetActiveWindow()
-  if active then return false end
+  local CFU = _G.ChatFrameUtil
+  local getActive = (CFU and CFU.GetActiveWindow) or _G.ChatEdit_GetActiveWindow
+  if getActive and getActive() then return false end
+  -- one click can pass several of the hooked functions (HandleModifiedItemClick, then InsertLink): searched once
+  local now = (_G.GetTime and GetTime()) or 0
+  if lastLink == text and lastAt and now - lastAt < 0.3 then return false end
   local name = (_G.GetItemInfo and (GetItemInfo(text))) or text:match("|h%[(.-)%]|h")
   if not name or name == "" then return false end
+  lastLink, lastAt = text, now
   ns.AHFind(name)
   return true
 end
-if _G.hooksecurefunc and _G.ChatEdit_InsertLink then
-  hooksecurefunc("ChatEdit_InsertLink", function(text) ns.Call(ns.AHLinkClick, text) end)
+-- (Daniel 22.11.2026: "klappt nicht" with Baganator) Baganator calls ChatFrameUtil.InsertLink where the client has it,
+-- not ChatEdit_InsertLink; Blizzard's bags go through HandleModifiedItemClick. All three are hooked.
+if _G.hooksecurefunc then
+  local function hit(text) ns.Call(ns.AHLinkClick, text) end
+  if _G.ChatEdit_InsertLink then hooksecurefunc("ChatEdit_InsertLink", hit) end
+  if _G.ChatFrameUtil and _G.ChatFrameUtil.InsertLink then hooksecurefunc(_G.ChatFrameUtil, "InsertLink", hit) end
+  if _G.HandleModifiedItemClick then
+    hooksecurefunc("HandleModifiedItemClick", function(link)
+      if _G.IsModifiedClick and IsModifiedClick("CHATLINK") then hit(link) end
+    end)
+  end
 end
 
 -- a filter changed: searched again at once when there was a search and its filters differ (Enter and the focus lost
