@@ -1469,6 +1469,7 @@ local function Place()
     { W.live, 100, live and true or false },
     { W.best, 80, bestHead and true or false },
     { W.useHave, W.useHave.w, IsShop(tab) },
+    { W.favCraft, W.favCraft.w, tab == "crates" },
     { W.listEdit, 90, LISTKEY[tab] ~= nil },
     { W.ahBlizz, 110, ahBtn },
   }, { y = cy })
@@ -1800,6 +1801,11 @@ local function BuildWith()
   -- schalter mit keine vorhandenen mats aus egal welcher quelle mitrechnen") one switch for all that is there
   W.useHave = Switch("Vorhandenes einrechnen", function() return not ns.db.shopNoHave end, function(v) ns.db.shopNoHave = not v or nil Draw() end,
     "Vorhandenes einrechnen", { "An: Mats aus Taschen, Reagenzientasche, Bank und Briefkasten zählen als vorhanden.", "Aus: nichts zählt, die Liste zeigt den ganzen Einkauf." })
+  -- (Daniel 23.11.2026, Bild Favor-Kisten: "eine auswahl, ob mit selbst herstellen oder ohne")
+  W.favCraft = Switch("Selbst herstellen", function() return not ns.db.favorNoCraft end,
+    function(v) ns.db.favorNoCraft = not v or nil if ns.Favor.Forget then ns.Favor.Forget() end Draw() end,
+    "Selbst herstellen", { "An: ein Bündel kommt hergestellt, wo das billiger ist (gelb \"(selbst)\").",
+      "Aus: jedes Bündel gekauft, beim Händler oder im AH.", "Gilt auch für Gold je Gunst in Skillen und Writs." })
   W.best = UI.Button(lp, "Auf", { small = true, onClick = function()
       for _, it in ipairs(W.items or {}) do
         local e = it.entry

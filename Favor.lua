@@ -45,10 +45,22 @@ function F.Held()
 end
 
 -- the cheapest bundle of a crate: cost, item, count, where the mats come from
+-- (Daniel 23.11.2026, Bild Favor-Kisten: "eine auswahl, ob mit selbst herstellen oder ohne") switch "Selbst herstellen"
+-- off (ProfitdonDB.favorNoCraft): each bundle only bought, at the vendor or in the AH (20 units as for crafting)
+function F.NoCraft() return ns.db and ns.db.favorNoCraft and true or false end
+local function BuyUnit(id)
+  local P = ns.Prices
+  local vu = P.VendorUnit(id)
+  local ah = P.AH(id) and P.Buy(id, 20) or nil
+  if vu and (not ah or vu <= ah) then return vu, "vendor" end
+  if ah then return ah, "ah" end
+end
 function F.Bundle(bundles)
   local best
+  local noCraft = F.NoCraft()
   for i = 1, #bundles, 2 do
-    local unit, src = ns.Crafts.ReagentUnit(bundles[i])
+    local unit, src
+    if noCraft then unit, src = BuyUnit(bundles[i]) else unit, src = ns.Crafts.ReagentUnit(bundles[i]) end
     if unit then
       local cost = unit * bundles[i + 1]
       if not best or cost < best[1] then best = { cost, bundles[i], bundles[i + 1], src } end

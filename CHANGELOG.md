@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.25
+- Favor-Kisten: neuer Schalter "Selbst herstellen" oben rechts. Aus: jedes Bündel wird gekauft (Händler oder AH) statt hergestellt, Gold je Gunst rechnet dann nur mit Kaufen.
+
 ## 0.2.24
 - Favor-Kisten: jede Abgabe gibt 50c je Gunst zurück (2s 50c bis 10s), das rechnet Profitdon jetzt für jede Kiste ein, bis es selbst gemessen hat.
 - Meldung "That bag is full.": /profit diag zeigt unter bagFull, was in dem Moment los war (letztes Herstellen, Taschen mit freien Plätzen und Art, Cursor, offene Fenster).
