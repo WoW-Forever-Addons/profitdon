@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.40
+- Einkaufsliste und Rezeptkosten: wer nur wenige Stück braucht, bekam den Durchschnitt der ersten 20 im AH als Preis (bei Ausrüstung den Schnitt aller Auktionen). Ein Stück kostet jetzt das billigste Angebot, mehr Stück entsprechend dazwischen.
+
 ## 0.2.39
 - Einkaufsliste, "Live prüfen": Ausrüstung und andere Einzelgegenstände (keine Handelsware) wurden zwar gesucht, das Ergebnis aber nicht übernommen, die Liste blieb beim Preis des letzten Scans. Jetzt zählt das billigste Angebot, und der Preis bleibt auch nach den 15 Minuten.
 - Einkaufsliste: steht ein Gegenstand laut Live-Prüfung gar nicht im AH, sagt die Zeile "gerade nicht im AH" und sein alter Preis zählt nicht mehr in "Einkauf gesamt".

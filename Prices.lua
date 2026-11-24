@@ -304,6 +304,11 @@ function P.Buy(id, n, key)
   local low = (r[5] and r[5] >= r[1]) and r[5] or r[1]
   local v
   if n <= 20 then v = r[6] elseif n <= 100 then v = r[7] else v = math.max(r[7] or 0, r[2] or 0) end
+  -- (Daniel 24.11.2026, Bild Einkaufsliste: Destiny 403g 12s je Stück, im AH "Preis ab 355g", 8 Auktionen) one piece was
+  -- priced at the average of the first 20 units, here of all 8 auctions. Fewer than those units: from the cheapest offer
+  -- (one unit) up to that average (all of them), in a line.
+  local span = math.min(20, r[3] or 20)
+  if v and n < span and v > low then return math.ceil(low + (v - low) * (n - 1) / (span - 1)) end
   return math.max(low, v or low)
 end
 
