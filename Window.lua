@@ -24,8 +24,8 @@ local floor, max, min = math.floor, math.max, math.min
 -- (Daniel 19.11.2026: "die Einkaufsliste auch unten als Reiter haben ... eigene Listen") Einkaufsliste is a book tab
 -- of its own: the list from Herstellen (chip "Aus Herstellen") and the own lists (ShopLists.lua), one chip each
 -- (Daniel 20.11.2026: "Diese Such-/Kaufseite als ERSTEN Reiter unten") Kaufen, the AH's search and purchase (AHPage.lua)
-local GROUPS = { { "ah", "Kaufen" }, { "craft", "Herstellen" }, { "shop", "Einkaufsliste" }, { "prof", "Berufe" }, { "de", "Entzaubern" }, { "vendor", "Händler" }, { "sell", "Verkaufen" }, { "report", "Auswertung" } }
-local SUBS = { ah = { "ah" }, craft = { "craft", "ahcraft", "skill" }, shop = { "shop" }, prof = { "pvendor", "pah" }, de = { "deah", "demake", "debag" }, vendor = { "vendor", "crates", "writs" }, sell = { "sell" }, report = { "report" } }
+local GROUPS = { { "ah", "Kaufen" }, { "craft", "Herstellen" }, { "shop", "Einkaufsliste" }, { "prof", "Berufe" }, { "de", "Entzaubern" }, { "vendor", "Händler" }, { "sell", "Verkaufen" }, { "own", "Auktionen" }, { "report", "Auswertung" } }
+local SUBS = { ah = { "ah" }, craft = { "craft", "ahcraft", "skill" }, shop = { "shop" }, prof = { "pvendor", "pah" }, de = { "deah", "demake", "debag" }, vendor = { "vendor", "crates", "writs" }, sell = { "sell" }, own = { "own" }, report = { "report" } }
 local GROUP_OF = {}
 for g, list in pairs(SUBS) do for _, k in ipairs(list) do GROUP_OF[k] = g end end
 local TABS = {
@@ -47,6 +47,8 @@ local TABS = {
   -- (Daniel 18.11.2026: Craftsman's Writs "möglichst effizient mit wenig laufwegen ... möglichst günstig") Writs.lua
   writs = { "Writs", "Craftsman's Writs: Writ im AH plus Ware, abzüglich Coin Pouch, je Ruf. Je Gebiet eine Kopfzeile mit + und - (billigster Ruf zuerst), darin je Ruf; ein Spaltenklick sortiert in jedem Gebiet. Zeile anklicken: Writ im AH kaufen. Rechtsklick auf einen Writ in der Tasche: Profitdon merkt sich den Kunden aus dem Angebot." },
   sell = { "Verkaufen", "Entzauberungsmats, Hergestelltes und Ausrüstung, die im AH mehr bringt als Entzaubern: genau zum Preis des billigsten Angebots, nicht darunter." },
+  -- (Daniel 24.11.2026: "meine eigenen auktionen fehlen mir irgendwie noch") Auctions.lua
+  own = { "Auktionen", "Deine Auktionen: Preis je Stück, billigstes fremdes Angebot, Restzeit. Rot: ein anderer ist billiger. Zeile anklicken, dann Abbrechen (zweiter Klick bestätigt)." },
   -- (Daniel 06.11.2026) Report.lua: Startkapital je Char, Gewinn seit Start, Goldverlauf, Gewinn je Methode
   report = { "Auswertung", "Gewinn seit dem Startkapital, Goldverlauf und Gewinn je Methode." },
 }
@@ -136,6 +138,7 @@ local COLS = {
   writs = { ITEM, Col("rep", "Ruf", 44), Col("writ", "Writ", 76), Col("ware", "Ware", 76), Col("net", "netto", 76, { minWidth = 700, fold = "n" }), Col("per", "je Ruf", 70) },
   vendor = { ITEM, Col("count", "Anzahl", 56), Col("cost", "Kosten", 84), Col("profit", "Gewinn", 84), Col("roi", "ROI", 56) },
   sell = { ITEM, Col("count", "Anzahl", 56), Col("unit", "je Stück", 84), Col("ret", "nach Gebühr", 96), Col("profit", "mehr als Händler", 110, { minWidth = 700, fold = "+" }) },
+  own = { ITEM, Col("count", "Anzahl", 56), Col("unit", "je Stück", 90), Col("other", "billigster anderer", 120, { minWidth = 600, fold = "a" }), Col("left", "Restzeit", 80) },
 }
 ns.WindowCols = COLS -- (tests)
 -- the columns of a list as shown: a run of 60 min is the hour itself, Gold/h would say the same twice
@@ -1099,6 +1102,42 @@ local function Rows()
     for _, e in ipairs(list) do out[#out + 1] = Row(e.id, DE.Text(e.group), { value = M(e.value) }, nil, DETip(e.id, e.group), { sv = { value = e.value } }) end
     if kept > 0 then out[#out + 1] = { kind = "note", text = ("%d Gegenstände bleiben liegen: im AH nach Gebühr mehr wert als die Mats (Reiter Verkaufen)."):format(kept) } end
     if (vend or 0) > 0 then out[#out + 1] = { kind = "note", text = ("%d Gegenstände bleiben liegen: der Händler zahlt mehr als die Mats wert sind."):format(vend) } end
+  elseif tab == "own" then
+    -- (Daniel 24.11.2026) the own auctions: undercut ones first, then by the time left
+    local A = ns.MyAuctions
+    local list = {}
+    for _, e in ipairs(A.List()) do
+      local st, other = A.State(e)
+      list[#list + 1] = { e = e, st = st, other = other, left = e.sold and 2e9 or (A.Left(e) or 1e9) }
+    end
+    local RANK = { under = 0, same = 1 }
+    table.sort(list, function(a, b)
+      local ra, rb = RANK[a.st] or 2, RANK[b.st] or 2
+      if ra ~= rb then return ra < rb end
+      return a.left < b.left
+    end)
+    local under = 0
+    for _, x in ipairs(list) do
+      local e = x.e
+      local sub
+      if e.sold then sub = GRN .. "verkauft, Gold im Briefkasten|r"
+      elseif x.st == "under" then under = under + 1 sub = RED .. ("unterboten: ein anderer bietet für %s"):format(M(x.other)) .. "|r"
+      elseif x.st == "same" then sub = YEL .. "gleich billig wie ein anderer|r"
+      elseif x.other then sub = "billigstes Angebot"
+      else sub = MUT .. "kein Preis anderer bekannt|r" end
+      local it = Row(e.id, sub, { count = e.qty, unit = M(e.unit), other = M(x.other), left = A.LeftText(e) }, e, nil,
+        { sv = { count = e.qty, unit = e.unit, other = x.other, left = x.left } })
+      local linkName = type(e.link) == "string" and e.link:match("%[(.-)%]")
+      if linkName and linkName ~= "" then it.title = linkName end
+      if x.st == "under" then it.markColor = C.red elseif x.st == "same" then it.markColor = C.yellow end
+      it.active = A.sel ~= nil and A.sel == e.auc
+      out[#out + 1] = it
+    end
+    local t = A.ReadAt()
+    if t and not ns.ScanState.open then
+      out[#out + 1] = { kind = "note", top = true, color = C.muted, text = ("Stand %s. Im Auktionshaus frischt sich die Liste von selbst auf."):format(date("%d.%m. %H:%M", t)) }
+    end
+    if under > 0 then out[#out + 1] = { kind = "note", top = true, color = C.red, text = ("%d unterboten: abbrechen und billiger neu einstellen (Verkaufen)."):format(under) } end
   elseif tab == "sell" then
     for _, e in ipairs(ns.SellList()) do
       local sub = e.unit and "billigstes Angebot im letzten Scan" or "kein Scanpreis: Klick sucht"
@@ -1331,6 +1370,14 @@ local function Primary()
       Draw()
     end }, shop
   end
+  if tab == "own" then
+    local A = ns.MyAuctions
+    local e = A.sel and A.Find(A.sel)
+    if not e then return nil end
+    return { text = A.Armed(e) and "Wirklich abbrechen" or "Abbrechen", kind = "primary",
+      disabled = (e.sold or not ns.ScanState.open) and true or false,
+      onClick = function() A.CancelClick(e) Draw() end }
+  end
   if PROF_MODE[tab] then
     if not CraftSel() then return nil end
     return { text = "Einkaufsliste", kind = "primary", onClick = function() ns.SetTab("shop") end }
@@ -1446,6 +1493,17 @@ local function FillBar()
           sub = sub .. (miss and (". Fehlt für eine Herstellung: " .. miss) or ". Kein Platz in den Taschen.")
         end
       end
+    end
+  elseif tab == "own" then
+    local A = ns.MyAuctions
+    local e = A.sel and A.Find(A.sel)
+    if e then
+      id = e.id
+      local cost = A.Cost(e)
+      sub = e.sold and "Verkauft, das Gold liegt im Briefkasten."
+        or not ns.ScanState.open and "Zum Abbrechen das Auktionshaus öffnen."
+        or A.Armed(e) and (YEL .. "Noch einmal klicken: Auktion abbrechen%s.|r"):format(cost and cost > 0 and (", Gebühr " .. M(cost)) or "")
+        or ("%d zu %s, Restzeit %s%s"):format(e.qty, M(e.unit), A.LeftText(e), cost and cost > 0 and (", Abbrechen kostet " .. M(cost)) or "")
     end
   elseif KIND[tab] and B.entry and B.kind == KIND[tab] then
     id = B.entry.id
@@ -1672,6 +1730,10 @@ function ns.EmptyText(k)
   if k == "deah" then return scan and ("Nichts " .. scan .. ", dessen Mats nach Gebühr mehr wert sind als der Preis.") or "Noch kein Vollscan: im Auktionshaus \"Vollscan\" drücken, dann stehen hier Grüne und Blaue zum Entzaubern." end
   if k == "debag" then return "Nichts zum Entzaubern in den Taschen." end
   if k == "sell" then return "Nichts in den Taschen, das im AH mehr bringt als beim Händler oder entzaubert." end
+  if k == "own" then
+    if ns.MyAuctions.ReadAt() then return "Keine eigenen Auktionen." end
+    return "Noch nicht gelesen: im Auktionshaus öffnet dieser Reiter die Liste deiner Auktionen."
+  end
   return TABS[k] and TABS[k][2] or ""
 end
 
@@ -1749,6 +1811,7 @@ local function SwitchTab(k)
   if not GROUP_OF[k] then return end
   if k ~= tab then ns.Select(nil) W.msg = nil end
   tab, group = k, GROUP_OF[k]
+  if k == "own" and ns.MyAuctions then ns.MyAuctions.Query() end
   ns.db.ui = ns.db.ui or {}
   ns.db.ui[group] = k
   -- the merchant's "Mats kaufen" buys for the list shown last
@@ -1810,6 +1873,10 @@ local function OnRowClick(it, button)
   elseif e and KIND[tab] then
     if W then W.headSel = nil end
     ns.Select(e, KIND[tab])
+  elseif e and tab == "own" then
+    local A = ns.MyAuctions
+    A.sel = (A.sel ~= e.auc) and e.auc or nil
+    A.armed = nil
   end
   Draw()
 end

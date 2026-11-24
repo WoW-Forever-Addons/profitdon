@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.43
+- Neuer Reiter "Auktionen": alle deine Auktionen mit Anzahl, Preis je Stück, billigstem Angebot anderer und Restzeit. Unterbotene stehen rot oben, Verkaufte am Ende. Zeile anklicken, dann "Abbrechen" (zweiter Klick bestätigt, die Gebühr steht dabei). Außerhalb des Auktionshauses zeigt der Reiter den letzten Stand.
+
 ## 0.2.42
 - Kaufen: die Preisliste zeigt deine eigenen Auktionen bei ihrem Preis ("dazu 20 von dir", oder "nur du: 4 Stück", wenn nur du zu dem Preis anbietest). Sie zählen nicht als Angebot zum Kaufen.
 
