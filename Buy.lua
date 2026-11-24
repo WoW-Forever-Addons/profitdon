@@ -162,6 +162,17 @@ local function Spend()
   if money and money < cap then return money, true end
   return cap, false
 end
+-- (Daniel 24.11.2026, Bild Einkaufsliste: Destiny, "Teurer als der Höchstbetrag je Klick", "kaufen auch ausgeblendet")
+-- one piece cannot be split over clicks: what the list asks for (mats, crate, writ) is bought as one piece dearer than
+-- the cap too, while the gold pays it (from confirmAbove with the second click). one: the price of the cheapest piece.
+local function SpendOne(one)
+  local spend, byMoney = Spend()
+  if byMoney or not one or one <= spend then return spend, byMoney end
+  if not (B.kind == "mats" or B.kind == "crate" or B.kind == "writ") then return spend, byMoney end
+  local money = ns.Num(ns.Call(GetMoney)) or 0
+  if money < one then return money, true end
+  return one, false
+end
 
 local function PlanCommodity()
   local id = B.id
@@ -174,7 +185,7 @@ local function PlanCommodity()
   end
   local maxUnit = MaxUnit(B.kind, id, B.entry)
   if not maxUnit or B.kind == "de" then B.plan, B.msg = nil, "Keine Stapelware." return end
-  local spend, byMoney = Spend()
+  local spend, byMoney = SpendOne(res[1] and res[1].unitPrice)
   -- (Daniel 20.11.2026, page Kaufen) the offers kept for the price preview, and what the gold (and the cap per click)
   -- buys at most, cheapest first
   if B.kind == "ah" then
@@ -249,9 +260,16 @@ end
 function ns.KeyLink(key) local k = KeyStr(key) return k and ns.keyLinks[k] or nil end
 
 local function PlanItem()
-  local spend, byMoney = Spend()
   local n = ns.Num(ns.Call(ns.AH.GetNumItemSearchResults, B.key)) or 0
   local maxUnit = MaxUnit(B.kind, B.id, B.entry)
+  -- (24.11.2026) every auction is one piece: the cheapest one the list may buy sets the amount of the click
+  local one
+  for i = 1, math.min(n, 200) do
+    local r = ns.Call(ns.AH.GetItemSearchResultInfo, B.key, i)
+    local p = type(r) == "table" and not r.containsOwnerItem and ns.Num(r.buyoutAmount)
+    if p and p > 0 and (not one or p < one) then one = p end
+  end
+  local spend, byMoney = SpendOne(one)
   local best, capped, low
   local ahOffers = {}
   for i = 1, math.min(n, 200) do

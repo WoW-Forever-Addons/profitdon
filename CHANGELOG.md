@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.41
+- Einkaufsliste: ein einzelnes Stück, das mehr kostet als der Höchstbetrag je Klick (z. B. eine Waffe für 355g), ließ sich nicht kaufen ("Teurer als der Höchstbetrag je Klick"). Jetzt geht ein Stück je Klick, solange das Gold reicht, mit dem zweiten Bestätigungsklick.
+
 ## 0.2.40
 - Einkaufsliste und Rezeptkosten: wer nur wenige Stück braucht, bekam den Durchschnitt der ersten 20 im AH als Preis (bei Ausrüstung den Schnitt aller Auktionen). Ein Stück kostet jetzt das billigste Angebot, mehr Stück entsprechend dazwischen.
 
