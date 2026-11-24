@@ -1,5 +1,10 @@
 # Profitdon
 
+## 0.2.28
+- Fenster beim Händler: die erste Zeile zum Verkaufen ist schon gewählt, ein Klick auf Verkaufen genügt; ist sie verkauft, rückt die nächste nach.
+- Kaufen zählt die Anzahl in der Zeile mit herunter, auch "Kaufen läuft ..." in der Leiste erscheint jetzt.
+- Ein Listeneintrag mit fester Menge wird nach dem Kauf beim selben Händlerbesuch nicht noch einmal voll angeboten; eine getippte Anzahl behält nur den Rest.
+
 ## 0.2.27
 - Hauptfenster öffnet ohne Standbild: Rezeptlisten rechnen im Hintergrund in kleinen Schritten, solange steht die letzte Liste oder "Rechne die Rezepte ...".
 - Neuzeichnen von Herstellen, Berufe und Entzaubern > Herstellen ohne Neuberechnung der Zeilen und Tooltips; Itemdaten werden je Sitzung behalten.

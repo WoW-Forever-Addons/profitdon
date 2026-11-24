@@ -1387,7 +1387,8 @@ function Cr.ShoppingList(entries, grouped)
     local e = { id = id, total = total, held = held, way = way > 0 and way or nil, need = need, depth = depth, src = need == 0 and (held < total and "mail" or "stock") or src, unit = unit,
       cost = (src ~= "craft" and unit) and unit * need or nil, maxUnit = unit and math.max(unit + 2, math.ceil(unit * 1.25)) or nil, via = via,
       short = short or nil, live = live or nil, timeBuy = timeBuy,
-      forItem = headItem, forRuns = headRuns, forVia = forVia, forSpell = headSpell }
+      forItem = headItem, forRuns = headRuns, forVia = forVia, forSpell = headSpell,
+      fixed = fixedNow or nil } -- (24.11.2026, Merchant.lua MatsPlan)
     out[#out + 1] = e
     -- (Daniel 06.11.2026: "unter rough powder eingerückt dann rough stone sehen ... bei den anderen rezepten natürlich auch")
     -- bought, but a known recipe makes it: its mats indented below as the other way, with what one unit costs made

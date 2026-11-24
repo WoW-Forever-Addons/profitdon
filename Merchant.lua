@@ -9,6 +9,11 @@ local _, ns = ...
 --   * "Mats kaufen": the vendor mats of the chosen craft's shopping list that this vendor sells, up to 12 purchases a click
 ---------------------------------------------------------------------------
 local MAX_PER_CLICK = 12
+-- (Daniel 24.11.2026: "bitte bei der anzahl mit runter zählen") run: the purchase in rounds (MatsClick; up here since Label
+-- read a global and never saw it); lastRun: the finished one, shown until the bags have caught up; visitGot[id]: what
+-- of a list entry that buys its amount every time ("fixed") was bought at this vendor visit
+local run, lastRun
+local visitGot = {}
 
 local function Here()
   local map = C_Map and ns.Call(C_Map.GetBestMapForUnit, "player")
@@ -99,12 +104,12 @@ local function Plan()
 end
 
 -- what "Mats kaufen" buys here: { index, id, buys (purchases), units, cost }
-local MatsJobs
+local MatsJobs, MatsFixed
 local function MatsPlan()
   -- (Daniel 16.11.2026, Bild: Seasoned Wolf Kabob über Skillen auf der Liste, "Mild Spices beim Händler (Knopf Mats
   -- kaufen)", the button was not there: "wieso will er mir keine mild spices vorschlagen?") the whole shopping list counts,
   -- not only the chosen recipe: the plan of "Skillen", the Favor crates, the tracked recipes
-  local need, jobs = {}, {}
+  local need, jobs, fixed = {}, {}, {}
   -- (Daniel 16.11.2026) mats already bought for it and crafts made since: only what the crafts still open lack, not the
   -- whole number again (the bags are emptier because the mats went into the crafts)
   local Cr = ns.Crafts
@@ -122,11 +127,20 @@ local function MatsPlan()
   for _, e in ipairs(Cr.ShoppingList(entries, true)) do
     if not e.head and not e.alt and e.src == "vendor" and e.need > 0 then
       need[e.id] = (need[e.id] or 0) + e.need
+      if e.fixed then fixed[e.id] = (fixed[e.id] or 0) + e.need end
       -- the recipes the purchase is for: jobs of the Herstellfenster
       if e.forSpell then jobs[#jobs + 1] = { e.forSpell, e.forRuns } end
     end
   end
   MatsJobs = jobs
+  -- a fixed entry asks for its amount whatever the bags hold: what this visit bought of it is taken off, else the row
+  -- stood at the full count again after the purchase
+  for id, f in pairs(fixed) do
+    local off = math.min(f, visitGot[id] or 0)
+    fixed[id], need[id] = f - off, need[id] - off
+    if need[id] <= 0 then need[id] = nil end
+  end
+  MatsFixed = fixed
   local out = {}
   local n = ns.Num(ns.Call(GetMerchantNumItems)) or 0
   for i = 1, n do
@@ -279,7 +293,7 @@ local function BuyPlan(only)
   return out
 end
 ns.MerchantBuyPlan = BuyPlan -- (tests)
-ns.MerchantBuyWant = function(id, n) buyWant[id] = n end -- (tests)
+ns.MerchantBuyWant = function(id, n) buyWant[id] = n lastRun = nil end -- (tests)
 
 -- what of the plan fits the bags (one normal slot stays free for the crafts, as when buying): [id] = units that fit
 local function Fit(plan)
@@ -453,6 +467,19 @@ local function Label()
   -- (Daniel 18.11.2026, Skizze) Einkaufen on top: one row per vendor mat, the count in a field (Profitdon's suggestion,
   -- a click selects it to type over), the cost; a line on the room; Verkaufen below
   local bp, buyPick = BuyPlan(), nil
+  -- (Daniel 24.11.2026, Bild: 720 Hot Spices gekauft, die Zeile stand weiter auf 720: "bitte bei der anzahl mit runter
+  -- zählen") while a purchase runs the rows show what of it is still to come (the bags lag behind the calls)
+  local shown = run or (lastRun and GetTime() - lastRun.t < 1.5 and lastRun) or nil
+  if shown and shown.target then
+    for _, e in ipairs(bp) do
+      local cap = shown.target[e.id]
+      if cap then
+        e.units = math.min(e.units, math.max(0, cap - (shown.got[e.id] or 0)))
+        e.buys = math.ceil(e.units / e.stack)
+        e.cost = e.buys * (e.price or 0)
+      end
+    end
+  end
   local fit = Fit(bp)
   local short = {}
   if #bp > 0 then
@@ -464,7 +491,7 @@ local function Label()
       local it = { kind = "trow", itemID = e.id, quality = quality, title = name or ("Item " .. e.id), sub = sub, id = e.id, buy = e,
         active = selBuy == e.id, cells = { value = Kit.Money(e.cost) },
         edit = { key = "n", value = e.units, tip = "Wie viele kaufen (Klick markiert die Zahl)",
-          onCommit = function(row, v) buyWant[row.id] = math.max(0, math.floor(tonumber(v) or 0)) selBuy, sel = row.id, nil Label() end } }
+          onCommit = function(row, v) buyWant[row.id] = math.max(0, math.floor(tonumber(v) or 0)) lastRun = nil selBuy, sel = row.id, nil Label() end } }
       items[#items + 1] = it
       if it.active then buyPick = it end
       if (fit[e.id] or 0) < e.units then short[#short + 1] = ("%d von %d %s"):format(fit[e.id] or 0, e.units, name or ("Item " .. e.id)) end
@@ -490,6 +517,12 @@ local function Label()
         onCommit = function(row, v) want[row.id] = math.min(v, row.have) sel, selBuy = row.id, nil Label() end } }
     sells[#sells + 1] = it
     if it.active then pick = it end
+  end
+  -- (Daniel 24.11.2026, Bild beim Händler, "Zeile wählen": "das erste bereits auswählen, dass ich nur noch verkaufen
+  -- klicken muss") nothing picked: the first row to sell is, also the next one once the picked row is sold out
+  if not pick and not selBuy and sells[1] then
+    pick, sel = sells[1], sells[1].id
+    pick.active = true
   end
   if #sells > 0 then
     if #bp > 0 then items[#items + 1] = { kind = "group", static = true, text = "Verkaufen" } end
@@ -522,7 +555,7 @@ local function Label()
   for _, e in ipairs(mp) do
     cost = cost + e.cost
     local name = ns.ItemInfo(e.id) or ("Item " .. e.id)
-    names[#names + 1] = ("%d× %s"):format(e.units, name)
+    if e.units > 0 or not run then names[#names + 1] = ("%d× %s"):format(e.units, name) end
     lines[#lines + 1] = { ("%d× %s"):format(e.units, name), ns.Money(e.cost) }
   end
   -- what it is for: the one recipe of the list by name, else the list
@@ -576,7 +609,7 @@ end
 -- multiple of the bundle, up to GetMerchantItemMaxStack, as Blizzard's own split dialog does), and when 12 calls are not
 -- enough, the rest follows on its own in rounds 1.5 s apart (the bags show what came first). At the end one line says
 -- what was bought. The run stops when the vendor window closes, when nothing is left, or when a round brought nothing.
-local matsAt, run
+local matsAt
 local ROUND_SEC, MAX_ROUNDS = 1.5, 20
 local function Bought()
   if not run then return end
@@ -586,6 +619,18 @@ local function Bought()
   end
   if #parts > 0 then ns.Print(("Beim Händler gekauft: %s (%s)."):format(table.concat(parts, ", "), ns.Money(run.cost))) end
   if run.full then ns.Print("|cffe0524aTaschen voll:|r nicht alles gekauft. Erst herstellen, dann den Rest kaufen.") end
+  -- (Daniel 24.11.2026: "bei der anzahl mit runter zählen") a typed count keeps what of it is left; the rows stay at
+  -- the rest until the bags show the purchase (lastRun)
+  for id, got in pairs(run.got) do
+    local f = run.fixed and run.fixed[id]
+    if f then visitGot[id] = (visitGot[id] or 0) + math.min(f, got) end
+    if buyWant[id] then
+      local left = buyWant[id] - got
+      buyWant[id] = left > 0 and left or nil
+    end
+  end
+  lastRun = { target = run.target, got = run.got, t = GetTime() }
+  ns.After(1.6, Label)
   run = nil
 end
 -- (Daniel 16.11.2026, "Inventory is full") what the bags take of an item: the free slots (shared by all items of a round)
@@ -662,6 +707,7 @@ function MatsClick(only)
   matsAt = now
   run = { got = {}, order = {}, cost = 0, rounds = 1, target = {}, only = only }
   for _, e in ipairs(BuyPlan(only)) do run.target[e.id] = e.units end
+  run.fixed = MatsFixed
   local jobsNow = MatsJobs or {}
   local done = Round()
   if done > 0 then
@@ -673,6 +719,7 @@ function MatsClick(only)
     end
   end
   if done >= MAX_PER_CLICK then ns.After(ROUND_SEC, Next) else Bought() end
+  Label()
   ns.After(0.8, Label)
 end
 ns.MerchantRun = function() return run end -- (tests)
@@ -732,4 +779,4 @@ ns.On("MERCHANT_SHOW", function()
 end)
 ns.On("MERCHANT_UPDATE", function() ns.Try(Learn) end)
 ns.On("BAG_UPDATE_DELAYED", function() if panel and panel:IsShown() then ns.WhenIdle("Verkaufsfenster", Label, 0.1) end end)
-ns.On("MERCHANT_CLOSED", function() if panel then panel:Hide() end sel, selBuy = nil, nil buyWant = {} end)
+ns.On("MERCHANT_CLOSED", function() if panel then panel:Hide() end sel, selBuy = nil, nil buyWant = {} visitGot, lastRun = {}, nil end)
