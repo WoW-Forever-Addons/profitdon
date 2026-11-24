@@ -195,10 +195,9 @@ local function CooldownLead(v)
   return YEL .. cd .. "|r  "
 end
 
-local function Row(id, sub, cells, entry, tip, extra)
-  local name, q = ItemName(id)
-  -- (Daniel 07.11.2026: "blizzards tooltip möglich, wenn ich mit der maus direkt drüber bin?") the game's item tooltip
-  -- (Kit.ItemTipFn over itemID), Profitdon's lines below it under a heading
+-- (Daniel 07.11.2026: "blizzards tooltip möglich, wenn ich mit der maus direkt drüber bin?") the game's item tooltip
+-- (Kit.ItemTipFn over itemID), Profitdon's lines below it under a heading
+local function TipLines(tip)
   local lines, short
   if type(tip) == "table" and type(tip[2]) == "table" then
     lines = { { "Profitdon", color = C.gold } }
@@ -213,12 +212,46 @@ local function Row(id, sub, cells, entry, tip, extra)
     end
   end
   local shift = short and IsShiftKeyDown and IsShiftKeyDown()
+  return (short and not shift) and short or lines, short, short and lines or nil
+end
+-- (24.11.2026, Ruckler, Laptop: Herstellen drew in 191 ms, every row's tooltip worked out at every redraw) a tooltip given
+-- as a function is worked out when it is first read (the mouse over the row, Shift)
+local lazyTip = { __index = function(it, k)
+  if k ~= "tipLines" and k ~= "tipShort" and k ~= "tipFull" then return nil end
+  local f = rawget(it, "tipFn")
+  if not f then return nil end
+  rawset(it, "tipFn", nil)
+  local ok, tip = pcall(f)
+  if not ok then ns.Try(error, tip, 0) tip = nil end
+  local lines, short, full = TipLines(tip)
+  rawset(it, "tipLines", lines) rawset(it, "tipShort", short) rawset(it, "tipFull", full)
+  return rawget(it, k)
+end }
+local function Row(id, sub, cells, entry, tip, extra)
+  local name, q = ItemName(id)
+  local lines, short, full
+  if type(tip) ~= "function" then lines, short, full = TipLines(tip) end
   local it = { kind = "trow", title = name, quality = q, itemID = id, icon = ns.Icon(id), sub = sub or "", cells = cells or {},
-    entry = entry, id = id, tipLines = (short and not shift) and short or lines, tipShort = short, tipFull = short and lines or nil,
+    entry = entry, id = id, tipLines = lines, tipShort = short, tipFull = full,
     -- (Daniel 21.11.2026: "überall fehlen die werte der ausrüstung wenn es of the ... ist") a piece from the bags: the
     -- tooltip of the piece itself (its link), with the suffix stats
     itemLink = type(entry) == "table" and type(entry.link) == "string" and entry.link or nil }
   for k, v in pairs(extra or {}) do it[k] = v end
+  if type(tip) == "function" then it.tipFn = tip setmetatable(it, lazyTip) end
+  return it
+end
+-- (24.11.2026) a row of a craft list is built once for its recipe's value (v, new with every new reckoning, Crafts.lua
+-- Cr.RowsSoon) and taken again at the next redraw; only "chosen" is set anew. An item name still missing builds it again.
+local function KeptRow(v, key, build)
+  local kept = v._rows
+  local it = kept and kept[key]
+  if it then return it end
+  local miss0 = ns.infoMiss
+  it = build()
+  if ns.infoMiss == miss0 then
+    v._rows = kept or {}
+    v._rows[key] = it
+  end
   return it
 end
 
@@ -465,11 +498,13 @@ local function Rows()
   if PROF_MODE[tab] then
     local mode, prof = PROF_MODE[tab], Cr.ViewProf()
     if not prof then out[1] = { kind = "note", text = "Keine Rezeptdaten." } return out end
-    local rows, missing, st = Cr.ProfRows(prof, mode)
+    local rows, missing, st = Cr.ProfRowsSoon(prof, mode)
+    if not rows then out[1] = { kind = "note", text = "Rechne die Rezepte ..." } return out end
     local hidden
     rows, hidden = Found(rows)
     FoundNote(out, hidden)
     for _, v in ipairs(rows) do
+     out[#out + 1] = KeptRow(v, tab, function()
       local ptext, lacking = PartsText(v)
       -- (Daniel 16.11.2026: "zuerst in grün oder rot schreiben, ob das rezept bereits gelernt ist oder fehlt") first in the line
       local lead = KnownLead(v)
@@ -486,8 +521,9 @@ local function Rows()
       local run, gph = RunGain(v.run), RunGain(v.runH)
       local cells = { learn = v.r.learnMax and (v.r.learnMax .. "?") or v.r.learn or 0, rcost = rcText, time = Cr.Dur(v.time), cost = M(v.cost), vendor = M(v.vendor), profit = MS(mode == "ah" and ahP or v.profit),
         roi = Pct(mode == "ah" and ahR or v.roi), ah = mode == "ah" and M(v.ahNet) or MS(v.ahProfit), dem = demText, run = MS(run), gph = MS(gph) }
-      out[#out + 1] = Row(v.id, sub, cells, v, CraftTip(v), { sv = { learn = ns.Crafts.LearnGate(v.r), rcost = rc or 1e12, time = v.time or 1e9, cost = v.cost, vendor = v.vendor,
+      return Row(v.id, sub, cells, v, function() return CraftTip(v) end, { sv = { learn = ns.Crafts.LearnGate(v.r), rcost = rc or 1e12, time = v.time or 1e9, cost = v.cost, vendor = v.vendor,
         profit = mode == "ah" and ahP or v.profit, roi = mode == "ah" and ahR or v.roi, ah = mode == "ah" and v.ahNet or v.ahProfit, dem = demSort, run = run or -1e12, gph = gph or -1e12 } })
+     end)
       out[#out].active = sel(v)
     end
     if #rows > 0 then
@@ -509,11 +545,13 @@ local function Rows()
     -- (Daniel 21.11.2026) Entzaubern > Herstellen: also every recipe of one or all professions, as in Berufe
     local view = tab == "demake" and Cr.DeView() or "mine"
     local rows, missing, st
-    if view ~= "mine" then rows, missing, st = Cr.ProfRows(view, mode) else rows, missing, st = Cr.Rows(mode) end
+    if view ~= "mine" then rows, missing, st = Cr.ProfRowsSoon(view, mode) else rows, missing, st = Cr.RowsSoon(mode) end
+    if not rows then out[1] = { kind = "note", text = "Rechne die Rezepte ..." } return out end
     local hidden
     rows, hidden = Found(rows)
     FoundNote(out, hidden)
     for _, v in ipairs(rows) do
+     out[#out + 1] = KeptRow(v, tab, function()
       local cells
       if mode == "de" then
         cells = { cost = M(v.cost), value = M(v.de), profit = MS(v.deProfit), roi = Pct(v.deRoi) }
@@ -521,21 +559,22 @@ local function Rows()
         if v.view then
           lead = KnownLead(v) .. (view == "all" and (MUT .. Cr.ProfName(v.r.prof) .. "|r  ") or "")
         end
-        out[#out + 1] = Row(v.id, lead .. CooldownLead(v) .. DE.Text(v.group), cells, v, CraftTip(v, true),
+        return Row(v.id, lead .. CooldownLead(v) .. DE.Text(v.group), cells, v, function() return CraftTip(v, true) end,
           { sv = { cost = v.cost, value = v.de, profit = v.deProfit, roi = v.deRoi } })
       elseif mode == "ah" then
         local ahP, ahR = v.ahExpProfit or v.ahProfit, v.ahExpProfit and v.ahExpRoi or v.ahRoi
         local demText, demSort = DemCell(v)
         cells = { count = v.maxCraft, time = Cr.Dur(v.time), cost = M(v.cost), ah = M(v.ahNet), profit = MS(ahP), roi = Pct(ahR), vendor = M(v.vendor), dem = demText }
-        out[#out + 1] = Row(v.id, CooldownLead(v) .. PartsText(v), cells, v, CraftTip(v),
+        return Row(v.id, CooldownLead(v) .. PartsText(v), cells, v, function() return CraftTip(v) end,
           { sv = { count = v.maxCraft, time = v.time or 1e9, cost = v.cost, ah = v.ahNet, profit = ahP, roi = ahR, vendor = v.vendor, dem = demSort } })
       else
         local run, gph = RunGain(v.run), RunGain(v.runH)
         cells = { count = v.maxCraft, time = Cr.Dur(v.time), cost = M(v.cost), vendor = M(v.vendor), profit = MS(v.profit), roi = Pct(v.roi),
           ah = MS(v.ahProfit), run = MS(run), gph = MS(gph) }
-        out[#out + 1] = Row(v.id, CooldownLead(v) .. PartsText(v), cells, v, CraftTip(v),
+        return Row(v.id, CooldownLead(v) .. PartsText(v), cells, v, function() return CraftTip(v) end,
           { sv = { count = v.maxCraft, time = v.time or 1e9, cost = v.cost, vendor = v.vendor, profit = v.profit, roi = v.roi, ah = v.ahProfit, run = run or -1e12, gph = gph or -1e12 } })
       end
+     end)
       out[#out].active = sel(v)
     end
     -- (Runde 2, 11.11.2026, Bild Entzaubern > Herstellen: five rows, all red, no word on it) a list of losses only says so
@@ -1141,6 +1180,7 @@ end
 -- The action bar
 ---------------------------------------------------------------------------
 local Draw
+local Page, PAGES -- (24.11.2026) the window's own pages, built when first wanted (BuildWith)
 -- the chosen row of Skillen (rows are built anew on every draw)
 local function SkillSel()
   local s = ns.Skill.sel
@@ -1555,6 +1595,7 @@ end
 
 Draw = function()
   if not (W and W:IsShown() and W.built) then return end
+  if tab == "report" then Page("rep") elseif tab == "sell" then Page("sellPage") elseif tab == "ah" then Page("ahPage") end
   if tab == "report" then
     W.listPage:Hide() W.rep:Show()
     W.rep:Fill()
@@ -1562,7 +1603,8 @@ Draw = function()
     ns.Try(DrawStatus)
     return
   end
-  W.rep:Hide() W.listPage:Show()
+  if W.rep then W.rep:Hide() end
+  W.listPage:Show()
   W.items = Sort(Signals(Rows()))
   -- (Runde 2, 11.11.2026) everything of the shopping list is there or bought: once the purchase signal of the chosen mat
   -- has gone, the bar goes on to the recipe ("Alle herstellen"), once per finished list
@@ -1595,7 +1637,10 @@ Draw = function()
   Place()
 end
 
+ns.NameFn(Draw, "Window.lua Draw")
+ns.NameFn(DrawStatus, "Window.lua DrawStatus")
 function ns.Refresh() if W and W:IsShown() then ns.Perf("Hauptfenster " .. tostring(tab), ns.Try, Draw) end end
+ns.NameFn(ns.Refresh, "Window.lua Refresh")
 -- (Daniel 16.11.2026: "ruckelig ... crafting auf, habe gecrafted und wollte in profitdon rumstöbern") the events of the
 -- game (bags, item data, the profession window) redraw the whole window: every craft did it, several times. They come
 -- together into one redraw a second later; while a cast runs (crafting) it waits until the casting stops, at most 8 s.
@@ -1636,7 +1681,8 @@ function ns.WindowShift(down, items)
   items = items or (W and W.items)
   if not items then return end
   for _, it in ipairs(items) do
-    if it.tipFull then it.tipLines = down and it.tipFull or it.tipShort end
+    -- (24.11.2026) a tooltip not worked out yet (Row, lazyTip) is worked out with the Shift of the moment it is read
+    if rawget(it, "tipFull") then it.tipLines = down and it.tipFull or it.tipShort end
   end
   local tt = GameTooltip
   local owner = tt and tt.IsShown and tt:IsShown() and tt.GetOwner and tt:GetOwner()
@@ -1683,6 +1729,29 @@ local function OnRowClick(it, button)
 end
 ns.WindowClick = function(it, button) OnRowClick(it, button) end -- (tests)
 
+-- (24.11.2026, Ruckler, Laptop: the first opening 2603 ms) a page of its own is built when it is first wanted: by the job
+-- after the window or by its tab. A failure in Blizzard's look builds it with the kit (Diag blizzMain names it).
+PAGES = { "sellPage", "ahPage", "rep" }
+local PAGE_MAKE = {
+  sellPage = function(kit) return ns.SellPage(W.listPage, kit) end,
+  ahPage = function(kit) return ns.AHPage(W.listPage, kit) end,
+  rep = function(kit) return ns.Report.Page(W.repParent or W.body, function() if Draw then Draw() end end, kit) end,
+}
+Page = function(k)
+  if not W then return nil end
+  if W[k] then return W[k] end
+  local ok, p = pcall(PAGE_MAKE[k], UI)
+  if not ok then
+    ns.Fact("blizzMain", "Fehler " .. k .. ": " .. tostring(p))
+    if UI == Kit then error(p, 0) end
+    p = PAGE_MAKE[k](Kit)
+  end
+  W[k] = p
+  p:Hide()
+  return p
+end
+ns.WindowPage = function(k) return Page(k) end -- (tests)
+
 local function BuildWith()
   ns.db.win = ns.db.win or {}
   W = UI.Window("ProfitdonFrame", { title = "Profitdon", logo = "Interface\\AddOns\\Profitdon\\Media\\portrait",
@@ -1702,7 +1771,7 @@ local function BuildWith()
     end,
     onLayout = function(win, w, h, mode)
       win.bw, win.bh, win.mode = w, h, mode
-      if win.built then if tab == "report" then win.rep:Layout(w, h - (win.repTop or 0)) else Place() end end
+      if win.built then if tab == "report" then if win.rep then win.rep:Layout(w, h - (win.repTop or 0)) end else Place() end end
     end })
   -- (Daniel 10.11.2026: "taschen sollen gerne in den Vordergrund, wenn geöffnet") the bags (Baganator, Blizzard's) live on
   -- MEDIUM and come up when shown; the Kit's HIGH kept Profitdon above them. MEDIUM and toplevel: whatever was opened or
@@ -1820,10 +1889,6 @@ local function BuildWith()
     -- (Daniel 18.11.2026) a head dragged onto another moves its column; a right click: the own order back
     onMove = function(from, to) ns.WindowMoveCol(tab, from, to) Draw() end })
   W.bar = UI.ActionBar(lp)
-  W.sellPage = ns.SellPage(lp, UI)
-  W.sellPage:Hide()
-  W.ahPage = ns.AHPage(lp, UI)
-  W.ahPage:Hide()
   W.ahBlizz = UI.Button(lp, "Blizzard-AH", { small = true, onClick = function() ns.AHFrameToggle() end,
     tooltip = "Blizzard-AH", tooltipLines = { "Zeigt Blizzards Auktionsfenster für diesen Besuch, nochmal drücken: wieder weg.",
       "Ganz abschalten: Optionen, \"Blizzards Auktionsfenster verstecken\"." } })
@@ -1846,15 +1911,19 @@ local function BuildWith()
       ns.SetWant(self:GetText(), true)
     end })
   -- (Blizzard-Optik) the first 36 px of the body stand beside the portrait: the Auswertung starts below them
-  local repParent = W.body
+  W.repParent = W.body
   if W.blizz then
-    repParent = CreateFrame("Frame", nil, W.body)
-    repParent:SetPoint("TOPLEFT", 4, -40)
-    repParent:SetSize(10, 10)
+    W.repParent = CreateFrame("Frame", nil, W.body)
+    W.repParent:SetPoint("TOPLEFT", 4, -40)
+    W.repParent:SetSize(10, 10)
     W.repTop = 44
   end
-  W.rep = ns.Report.Page(repParent, function() if Draw then Draw() end end, UI)
-  W.rep:Hide()
+  -- (24.11.2026) the pages Verkaufen, Kaufen and Auswertung (two thirds of the window's frames) come in the frames after
+  -- the window, or at once when their tab is shown first (Pages)
+  local win = W
+  ns.Job("Fenster Seiten", function(pause)
+    for _, k in ipairs(PAGES) do if W ~= win then return end Page(k) pause() end
+  end)
   local tick = 0
   W:SetScript("OnUpdate", function(_, dt)
     tick = tick + (tonumber(dt) or 0)
@@ -1890,8 +1959,8 @@ end
 ns.WindowReset = function() if W then W:Hide() end W = nil end -- (tests: build the window anew)
 ns.WindowBlizz = function() return W and W.blizz or false end
 
-function ns.ToggleWindow(show, where)
-  if not W then Build() end
+local function ToggleWindow(show, where)
+  if not W then ns.Perf("Fenster bauen", Build) end
   if show == nil then show = not W:IsShown() end
   if show and where then SwitchTab(where) end
   W:SetShown(show)
@@ -1900,9 +1969,13 @@ function ns.ToggleWindow(show, where)
   if not show and ns.AHLeave then ns.AHLeave() end
   if show then
     ShowTab()
-    Draw()
+    ns.Perf("Fenster zeigen " .. tostring(tab), Draw)
   end
 end
+-- (24.11.2026, Laptop: the first opening stood in the slow-call log as `call ?` with 2603 ms) opening and shutting under
+-- a name of its own (/profit diag "Zeit Fenster öffnen", ProfitdonDB.slow "Window.lua Fenster öffnen")
+function ns.ToggleWindow(show, where) return ns.Perf("Fenster öffnen", ToggleWindow, show, where) end
+ns.NameFn(ns.ToggleWindow, "Window.lua Fenster öffnen")
 
 -- the window beside Blizzard's (mode "right"), or in its place while that is kept away ("over")
 function ns.AHDock(mode)
@@ -1951,6 +2024,22 @@ ns.OnInit(function()
   local ui = ns.db.ui
   if type(ui) == "table" and ui.craft then tab = ui.craft end
 end)
+-- (24.11.2026, Ruckler) a craft list worked out as a job (Crafts.lua Cr.RowsSoon) is drawn once it is done, when the
+-- character is idle (as every redraw of the game's events), right away otherwise
+function ns.RowsDone() if W and W:IsShown() then ns.WhenIdle("Hauptfenster", ns.Refresh, 0.05) end end
+-- (24.11.2026, Laptop: the first opening on Herstellen 2603 ms) the list the window opens on is worked out after the
+-- login in the background (slices of 4 ms), the first opening shows it at once (a newer one follows as a job)
+function ns.WindowPrewarm()
+  if W and W:IsShown() then return end
+  local Cr = ns.Crafts
+  if CRAFT_MODE[tab] then
+    local view = tab == "demake" and Cr.DeView() or "mine"
+    if view ~= "mine" then Cr.ProfRowsSoon(view, CRAFT_MODE[tab]) else Cr.RowsSoon(CRAFT_MODE[tab]) end
+  elseif PROF_MODE[tab] and Cr.ViewProf() then
+    Cr.ProfRowsSoon(Cr.ViewProf(), PROF_MODE[tab])
+  end
+end
+ns.On("PLAYER_LOGIN", function() ns.After(15, ns.WindowPrewarm) end)
 
 ---------------------------------------------------------------------------
 -- Options in DonCore's one options window (/profit optionen)

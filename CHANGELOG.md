@@ -1,5 +1,10 @@
 # Profitdon
 
+## 0.2.27
+- Hauptfenster öffnet ohne Standbild: Rezeptlisten rechnen im Hintergrund in kleinen Schritten, solange steht die letzte Liste oder "Rechne die Rezepte ...".
+- Neuzeichnen von Herstellen, Berufe und Entzaubern > Herstellen ohne Neuberechnung der Zeilen und Tooltips; Itemdaten werden je Sitzung behalten.
+- /profit diag nennt die Zeiten für Fenster öffnen, bauen und zeigen.
+
 ## 0.2.26
 - Weniger Ruckler: Umbuchen der AH-Verkäufe, Rezepte und Altdaten lesen nach dem Login sowie das Berufsfenster beim Herstellen laufen in kleinen Schritten über mehrere Frames.
 - Das Hauptfenster zeichnet bei neuen Itemdaten nur neu, wenn vorher ein Gegenstand fehlte.

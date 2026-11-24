@@ -193,6 +193,9 @@ local function NoteSlow(context, fn, ms)
 end
 ns.SLOW_KEEP = 12
 ns._NoteWhere = NoteWhere
+-- (24.11.2026, Laptop: the first opening of the window stood as `call ?` with 2603 ms) a fixed name for a function the
+-- slow-call log would otherwise not know (called through ns.Try without a listener, timer or job of its own)
+function ns.NameFn(fn, where) if type(fn) == "function" then fnWhere[fn] = where end return fn end
 ns._NoteSlow = function(context, fn, ms) pcall(NoteSlow, context, fn, ms) end
 ns._SLOW_MS = SLOW_MS
 
@@ -251,7 +254,13 @@ function ns.Money(c, color)
 end
 
 -- name, link, quality, icon, sell price, stack size, class, item level (nil until the game has loaded the item)
+-- (24.11.2026, Ruckler, Laptop: the first opening of the main window took 2603 ms, the tab Herstellen asked the game
+-- 23511 times for item data, a redraw 1939 times) what the game said of an item does not change in a session: kept
+-- once it came (infoCache), asked again only while it has not. ns.itemCacheOff (the tests change their items) asks always.
+local infoCache = {}
 function ns.ItemInfo(id)
+  local c = id and not ns.itemCacheOff and infoCache[id]
+  if c then return c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8] end
   local GI = (C_Item and C_Item.GetItemInfo) or GetItemInfo
   local name, link, quality, level, _, _, _, stack, _, icon, sell, class = ns.Call(GI, id)
   if not name then
@@ -259,9 +268,13 @@ function ns.ItemInfo(id)
     -- when this changed since they were drawn (any addon's item data fired a full redraw before)
     ns.infoMiss = (ns.infoMiss or 0) + 1
     if C_Item and C_Item.RequestLoadItemDataByID then ns.Call(C_Item.RequestLoadItemDataByID, id) end
+    return nil, link, quality, icon, ns.Num(sell), ns.Num(stack), class, ns.Num(level)
   end
-  return name, link, quality, icon, ns.Num(sell), ns.Num(stack), class, ns.Num(level)
+  sell, stack, level = ns.Num(sell), ns.Num(stack), ns.Num(level)
+  if id and not ns.itemCacheOff and not issecret(name) then infoCache[id] = { name, link, quality, icon, sell, stack, class, level } end
+  return name, link, quality, icon, sell, stack, class, level
 end
+function ns.ItemInfoForget() infoCache = {} end -- (tests)
 
 -- class (2 weapon, 4 armour) and equipment slot without loading the item
 function ns.ItemClass(id)
@@ -270,9 +283,14 @@ function ns.ItemClass(id)
   return ns.Num(class), equipLoc
 end
 
+local iconCache = {}
 function ns.Icon(id)
+  local c = id and not ns.itemCacheOff and iconCache[id]
+  if c then return c end
   local GI = (C_Item and C_Item.GetItemIconByID) or GetItemIcon
-  return ns.Call(GI, id) or 134400
+  local icon = ns.Call(GI, id)
+  if icon and id and not ns.itemCacheOff then iconCache[id] = icon end
+  return icon or 134400
 end
 
 -- (21.11.2026, Laptop-Daten: since 21.11. the game gave an empty realm name, scans and characters landed under "|A" and
@@ -406,6 +424,9 @@ local function RunIdle()
   idleWork = {}
   for _, fn in pairs(list) do ns.Try(fn) end
 end
+-- (24.11.2026, Laptop: `Disenchant.lua:585` 191 ms was the redraw of the window) the timer of the idle work took the place
+-- of whoever armed it first; it has its own name now, each piece of work keeps its caller's place
+ns.NameFn(RunIdle, "Core.lua idle")
 function ns.WhenIdle(key, fn, delay)
   idleWork[key] = fn
   NoteWhere(fn, 2) -- (22.11.2026) the slow-call log names each idle job's place, not the first caller's

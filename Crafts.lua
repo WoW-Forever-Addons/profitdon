@@ -898,13 +898,17 @@ end
 
 -- the rows: "vendor" (crafts for the vendor), "ah" (for the auction house) or "de" (crafts to disenchant), best profit first; with
 -- ProfitdonDB.craftAll also the ones under the minimum profit
-function Cr.Rows(mode)
+-- (24.11.2026) pause: inside a job (Cr.RowsSoon) a slice may end before each recipe; nil works it out at once
+local function RowsWork(mode, _, pause)
   Cr.cache = {}
   local st = { known = 0, price = 0, data = 0, below = 0, noDE = 0, noAH = 0 }
-  local ok, rows = pcall(function()
+  local function work()
     local out = {}
     local all = ns.db.craftAll
-    for spell in pairs(Mine().known) do
+    local spells = {}
+    for spell in pairs(Mine().known) do spells[#spells + 1] = spell end
+    for _, spell in ipairs(spells) do
+      if pause then pause() end
       st.known = st.known + 1
       local r = Cr.Recipe(spell)
       local v, why = r and Cr.Value(r)
@@ -923,7 +927,7 @@ function Cr.Rows(mode)
           v.mode, v.show = mode, profit
           v.maxCraft = Cr.MaxCraft(v)
           -- (Daniel 18.11.2026) the run of 30 min and two of them (Gold/h), for the vendor list
-          if mode == "vendor" then Cr.RunsOf(v) end
+          if mode == "vendor" then Cr.RunsOf(v, pause) end
           out[#out + 1] = v
         end
       end
@@ -932,30 +936,78 @@ function Cr.Rows(mode)
     -- (22.11.2026) the best Gold/h of this character's vendor list is the price of an hour of crafting (Cr.GoldHour)
     if mode == "vendor" then Cr.SetGoldHour(out) end
     return out
-  end)
+  end
+  if pause then
+    local rows = work()
+    Cr.cache = nil
+    return rows, st.price, st
+  end
+  local ok, rows = pcall(work)
   Cr.cache = nil
   if not ok then error(rows, 0) end
   -- second value: the count of recipes lacking a price (as before), third: why the others are not shown
   return rows, st.price, st
 end
+function Cr.Rows(mode) return RowsWork(mode) end
 
 -- (Daniel 16.11.2026: "wann brauchen wir eine neuberechnung überhaupt") a list of the craft tabs worked out every recipe's
 -- value at every redraw, a click on a row too. It is kept for the same scan, live offers, data version (bags, recipes,
 -- options), switch "all" and minute (cooldowns end), and taken again.
+-- (24.11.2026, Ruckler, Laptop: the first opening of the window on Herstellen 2603 ms) each list (mode and profession)
+-- is kept on its own (Herstellen and Für Auktionshaus took each other's place), and the window asks with Cr.RowsSoon /
+-- Cr.ProfRowsSoon: a list not kept for this key is worked out as a job (ns.Job, slices of 4 ms, a recipe at a time)
+-- while the window shows the last one (or a note), and is drawn again once it is done.
 local memo = {}
+local function MemoKey(a1, a2)
+  local st = ns.Prices.Store()
+  return table.concat({ tostring(a1), tostring(a2), st and st.t or 0, ns.liveVer or 0, ns.dataVer or 0,
+    ns.db.craftAll and 1 or 0, math.floor(time() / 60), tostring(Cr.assumeChar) }, "|")
+end
 local function Memo(name, f)
-  return function(...)
-    local st = ns.Prices.Store()
-    local a1, a2 = ...
-    local key = table.concat({ tostring(a1), tostring(a2), st and st.t or 0, ns.liveVer or 0, ns.dataVer or 0,
-      ns.db.craftAll and 1 or 0, math.floor(time() / 60), tostring(Cr.assumeChar) }, "|")
-    local m = memo[name]
+  return function(a1, a2)
+    local slot = name .. "|" .. tostring(a1) .. "|" .. tostring(a2)
+    local key = MemoKey(a1, a2)
+    local m = memo[slot]
     if not ns.bagCacheOff and m and m.key == key then return m[1], m[2], m[3] end
-    local r1, r2, r3 = f(...)
-    memo[name] = { key = key, r1, r2, r3 }
+    local r1, r2, r3 = f(a1, a2)
+    memo[slot] = { key = key, r1, r2, r3 }
     return r1, r2, r3
   end
 end
+-- the job's Cr.cache, Cr.assume and Cr.assumeChar are its own: put aside while its slice ends and others run
+local function Sliced(pause)
+  return function()
+    local c, a, ac = Cr.cache, Cr.assume, Cr.assumeChar
+    Cr.cache, Cr.assume, Cr.assumeChar = nil, nil, nil
+    pause()
+    Cr.cache, Cr.assume, Cr.assumeChar = c, a, ac
+  end
+end
+-- returns rows, missing, st, pending: pending is true while the list for now is worked out (rows: the last one or nil)
+local function Soon(name, f)
+  return function(a1, a2)
+    -- the tests (their bags change without events) take the list at once, through Cr.Rows / Cr.ProfRows as they set it
+    if ns.bagCacheOff then local r1, r2, r3 = Cr[name](a1, a2) return r1, r2, r3, false end
+    local slot = name .. "|" .. tostring(a1) .. "|" .. tostring(a2)
+    local key = MemoKey(a1, a2)
+    local m = memo[slot]
+    if m and m.key == key then return m[1], m[2], m[3], false end
+    local inline = true
+    ns.Job("Liste " .. slot, function(pause)
+      local k = MemoKey(a1, a2)
+      local r1, r2, r3 = f(a1, a2, Sliced(pause))
+      memo[slot] = { key = k, r1, r2, r3 }
+      -- worked out over several frames: the window draws it (Window.lua ns.RowsDone, not inside the job's slice)
+      if not inline and ns.RowsDone then ns.RowsDone() end
+    end, function() Cr.cache, Cr.assume, Cr.assumeChar = nil, nil, nil end)
+    inline = false
+    m = memo[slot]
+    if m and m.key == key then return m[1], m[2], m[3], false end -- done at once (no game clock: the tests)
+    if m then return m[1], m[2], m[3], true end
+    return nil, 0, nil, true
+  end
+end
+Cr.RowsSoon = Soon("Rows", RowsWork)
 Cr.Rows = Memo("Rows", Cr.Rows)
 Cr.MemoReset = function() memo = {} end
 
@@ -1557,11 +1609,28 @@ function Cr.Run(v, k)
   return res
 end
 -- v.run (one run), v.runH (the runs of an hour, Gold/h); a failure leaves them nil and the list stands (ns.Try reports it)
-function Cr.RunsOf(v)
+-- (24.11.2026) pause: inside a job a slice may end before each run (up to 38 ms a recipe on the laptop)
+function Cr.RunsOf(v, pause)
+  if pause then
+    -- the two dear parts of a run each in a slice of its own: they are kept (room 5 s, break-even per data version)
+    -- and Cr.Run takes them from there (the same flag shopNoHave as Cr.Run gives each)
+    pause()
+    ns.Try(Cr.RoomCrafts, v.r)
+    pause()
+    local keep = ns.db.shopNoHave
+    ns.db.shopNoHave = true
+    ns.Try(Cr.Breakeven, v.r, "vendor")
+    ns.db.shopNoHave = keep
+    pause()
+  end
   local ok1, a = ns.Try(Cr.Run, v, 1)
+  if pause then pause() end
   local ok2, b = ns.Try(Cr.Run, v, 3600 / Cr.RunSec())
   v.run, v.runH = ok1 and a or nil, ok2 and b or nil
 end
+ns.NameFn(Cr.Run, "Crafts.lua Cr.Run") -- (24.11.2026) up to 38 ms a recipe on the laptop, `call ?` before
+ns.NameFn(Cr.RoomCrafts, "Crafts.lua Cr.RoomCrafts")
+ns.NameFn(Cr.Breakeven, "Crafts.lua Cr.Breakeven")
 
 -- (Daniel 11.11.2026: "sollte zuerst die zwischenschritte craften, nacheinander ... dann zum schluss das hauptgegenstand
 -- ... blizzard verlangt für jeden schritt einen klick. also einmal z.b. alles herstellen für powder, dann zweiter klick
@@ -2002,9 +2071,9 @@ end
 -- the rows of the profession: mode "vendor" or "ah" as in Cr.Rows, every recipe, learnable or known
 -- (Daniel 21.11.2026, Bild Entzaubern > Herstellen: "alle rezepte und alle berufe auswählbar machen") also mode "de"
 -- (crafts to disenchant) and prof "all": every profession, each valued as if at its own top
-function Cr.ProfRows(prof, mode)
+local function ProfRowsWork(prof, mode, pause)
   local st = { known = 0, price = 0, data = 0, below = 0, noAH = 0, noDE = 0 }
-  local ok, rows = pcall(function()
+  local function work()
     local out, seen = {}, {}
     local all = ns.db.craftAll
     local function one(spell, pf)
@@ -2012,6 +2081,7 @@ function Cr.ProfRows(prof, mode)
       local r = Cr.Recipe(spell)
       if not (r and r.prof == pf) then return end
       seen[spell] = true
+      if pause then pause() end
       st.known = st.known + 1
       -- (all professions: only gear gets valued, the rest is skipped before the costly part)
       if mode == "de" and r.item and r.item > 0 and not ns.DE.Group(r.item) then st.noDE = st.noDE + 1 return end
@@ -2024,22 +2094,33 @@ function Cr.ProfRows(prof, mode)
       if mode == "vendor" and v.sellGuess and profit > 0 then st.wait = (st.wait or 0) + 1 return end
       v.mode, v.show, v.view = mode, profit, true
       v.knownBy = Cr.KnownBy(spell)
-      if mode == "vendor" then Cr.RunsOf(v) end
+      if mode == "vendor" then Cr.RunsOf(v, pause) end
       out[#out + 1] = v
     end
     -- each profession on its own: the cache and the made-on-the-way steps belong to the profession assumed
     for _, pf in ipairs(prof == "all" and Cr.ProfList() or { prof }) do
       Cr.cache, Cr.assume = {}, pf
-      for spell in pairs(ns.CRAFTS or {}) do one(spell, pf) end
-      for spell in pairs(type(ns.db.craftExtra) == "table" and ns.db.craftExtra or {}) do one(spell, pf) end
+      -- (24.11.2026) the spells listed first: a slice of the job may end inside the loop
+      local spells = {}
+      for spell in pairs(ns.CRAFTS or {}) do spells[#spells + 1] = spell end
+      for spell in pairs(type(ns.db.craftExtra) == "table" and ns.db.craftExtra or {}) do spells[#spells + 1] = spell end
+      for _, spell in ipairs(spells) do one(spell, pf) end
     end
     table.sort(out, function(a, b) if a.show ~= b.show then return a.show > b.show end return a.r.spell < b.r.spell end)
     return out
-  end)
+  end
+  if pause then
+    local rows = work()
+    Cr.cache, Cr.assume = nil, nil
+    return rows, st.price, st
+  end
+  local ok, rows = pcall(work)
   Cr.cache, Cr.assume = nil, nil
   if not ok then error(rows, 0) end
   return rows, st.price, st
 end
+function Cr.ProfRows(prof, mode) return ProfRowsWork(prof, mode) end
+Cr.ProfRowsSoon = Soon("ProfRows", ProfRowsWork)
 Cr.ProfRows = Memo("ProfRows", Cr.ProfRows)
 
 ---------------------------------------------------------------------------
