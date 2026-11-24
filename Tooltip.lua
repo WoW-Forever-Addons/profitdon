@@ -145,6 +145,8 @@ ns.ProfitdonSellLine = OnSellLine -- (tests)
 ns.OnInit(function()
   local T = TooltipDataProcessor
   if not (T and Enum and Enum.TooltipDataType) then return end
+  -- (24.11.2026) a slow tooltip shows as "Tooltip.lua:<line>" in the slow-call log, not as "call ?"
+  if ns._NoteWhere then ns._NoteWhere(OnSellLine, 1) ns._NoteWhere(OnItem, 1) end
   local L = Enum.TooltipDataLineType
   if T.AddLinePostCall and L and L.SellPrice then
     ns.Call(T.AddLinePostCall, L.SellPrice, function(tip) ns.Try(OnSellLine, tip) end)

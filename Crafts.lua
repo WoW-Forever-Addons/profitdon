@@ -116,7 +116,8 @@ function Cr.LegacyPct(name)
   local t = ns.db and ns.db.legacy and ns.db.legacy[name]
   return type(t) == "table" and tonumber(t.pct) or 0
 end
-function Cr.ReadLegacy()
+-- pause: (24.11.2026, Ruckler, `timer Crafts.lua:191` 9.4 ms at login) yields between the nodes inside a job (ns.Job)
+function Cr.ReadLegacy(pause)
   local T = rawget(_G, "C_Traits")
   if type(T) ~= "table" or type(T.GetConfigIDByTreeID) ~= "function" then return nil, "kein C_Traits" end
   local cfg = ns.Call(T.GetConfigIDByTreeID, Cr.LEGACY_TREE)
@@ -124,7 +125,8 @@ function Cr.ReadLegacy()
   local nodes = ns.Call(T.GetTreeNodes, Cr.LEGACY_TREE)
   if type(nodes) ~= "table" then return nil, "keine Knoten" end
   local seen, all = {}, {}
-  for _, node in ipairs(nodes) do
+  for k, node in ipairs(nodes) do
+    if pause and k % 4 == 0 then pause() end
     local info = ns.Call(T.GetNodeInfo, cfg, node)
     if type(info) == "table" then
       local rank = ns.Num(info.activeRank) or ns.Num(info.currentRank) or 0
@@ -163,8 +165,10 @@ function Cr.ReadLegacy()
   if chef then return chef, nil, all end
   return { rank = 0, pct = 0, from = "nicht im Baum" }, ("%d Talente gelesen, kein %s"):format(#seen, Cr.CHEF_NAME), all
 end
-local function LegacyNow()
-  local ok, res, why, all = pcall(Cr.ReadLegacy)
+local function LegacyNow(pause)
+  local ok, res, why, all
+  -- inside a job the reading may not run in a pcall (no yield across it): an error ends the job (its fail notes it)
+  if pause then ok, res, why, all = true, Cr.ReadLegacy(pause) else ok, res, why, all = pcall(Cr.ReadLegacy) end
   if not ok then ns.Fact("legacyChef", "Fehler: " .. tostring(res)) return end
   if not res then ns.Fact("legacyChef", why or "nicht lesbar") return end
   local oldBarter = Cr.LegacyPct("Bartering") + 1000 * Cr.LegacyPct("Working Overtime")
@@ -188,8 +192,11 @@ local function LegacyNow()
     if ns.Touch then ns.Touch() end
   end
 end
-ns.On("PLAYER_LOGIN", function() ns.After(6, LegacyNow) end)
-ns.On("TRAIT_CONFIG_UPDATED", function() ns.After(1, LegacyNow) end)
+local function LegacyJob()
+  ns.Job("Legacy lesen", LegacyNow, function(err) ns.Fact("legacyChef", "Fehler: " .. tostring(err)) end)
+end
+ns.On("PLAYER_LOGIN", function() ns.After(6, LegacyJob) end)
+ns.On("TRAIT_CONFIG_UPDATED", function() ns.After(1, LegacyJob) end)
 ns.LegacyNow = LegacyNow -- (tests)
 -- the extra result of a recipe's profession in percent (0 without)
 function Cr.BonusPct(r)
@@ -446,8 +453,10 @@ end
 local function Knows(id) return (ns.Call(IsPlayerSpell, id) or ns.Call(IsSpellKnown, id)) and true or false end
 
 -- the spell check: only adds (only a window removes)
+-- (24.11.2026, Ruckler, `timer Crafts.lua:608` 9.0 ms at login) one walk through the recipe data for all professions
+-- (it was one per profession), and pause (ns.Job) splits it
 local last = -100
-function Cr.Read(force)
+function Cr.Read(force, pause)
   if not ns.db then return 0 end
   if not force and GetTime() - last < 20 then return 0 end
   last = GetTime()
@@ -455,13 +464,19 @@ function Cr.Read(force)
   if #skills == 0 then return 0 end
   local c = Mine()
   local found = 0
+  local rank = {}
   for _, s in ipairs(skills) do
     c.skills[s[1]] = { s[2], s[3] }
-    for spell, d in pairs(ns.CRAFTS or {}) do
-      if d[1] == s[1] and d[2] <= s[2] and Knows(spell) then
-        if not c.known[spell] then found = found + 1 end
-        c.known[spell] = true
-      end
+    rank[s[1]] = math.max(rank[s[1]] or 0, s[2])
+  end
+  local k = 0
+  for spell, d in pairs(ns.CRAFTS or {}) do
+    k = k + 1
+    if pause and k % 64 == 0 then pause() end
+    local r = rank[d[1]]
+    if r and d[2] <= r and Knows(spell) then
+      if not c.known[spell] then found = found + 1 end
+      c.known[spell] = true
     end
   end
   c.t = time()
@@ -487,7 +502,10 @@ ns.On("UNIT_SPELLCAST_SUCCEEDED", function(_, unit, _, spell)
     end
   end
 end)
-local function ReadWindow()
+-- pause (24.11.2026, Ruckler, DonMonitor Ironforge while cooking: "Berufsfenster lesen" up to 27 ms, the full reading
+-- after each skill point): inside a job (ns.Job) the reading yields between recipes. After every pause the window must
+-- still show the same profession, else the reading stops without touching the known recipes (and the next one is full).
+local function ReadWindow(pause)
   if not ns.db then return end
   local c = Mine()
   local T = C_TradeSkillUI
@@ -498,17 +516,31 @@ local function ReadWindow()
   local ids = ns.Call(T.GetAllRecipeIDs)
   if not (prof and PROFS[prof] and type(ids) == "table") then return end
   ns.db.craftExtra = ns.db.craftExtra or {}
+  -- the recipes made since the last reading (a cast during a pause counts for the next one)
+  local cast = castSeen
+  castSeen = {}
+  local function Gone()
+    if not pause then return false end
+    pause()
+    local now = ns.Call(T.GetBaseProfessionInfo)
+    if type(now) == "table" and ns.Num(now.professionID) == prof then return false end
+    readSig[prof] = nil
+    for id in pairs(cast) do castSeen[id] = true end
+    return true
+  end
   local learned, changed = {}, false
   local nLearned0 = 0
-  for _, id in ipairs(ids) do
+  for k, id in ipairs(ids) do
+    if k % 16 == 0 and Gone() then return end
     local ri = ns.Call(T.GetRecipeInfo, id)
     if type(ri) == "table" and ri.learned == true then learned[id] = true nLearned0 = nLearned0 + 1 end
   end
   local sig = table.concat({ #ids, nLearned0, type(info) == "table" and tostring(info.skillLevel) or "?", tostring(info and info.maxSkillLevel) }, ":")
   local full = readSig[prof] ~= sig
   readSig[prof] = sig
-  for _, id in ipairs(ids) do
-    if learned[id] and (full or castSeen[id] or Cr.HasCooldown(id) or (type(c.cd) == "table" and c.cd[id])) then
+  for k, id in ipairs(ids) do
+    if k % 4 == 0 and Gone() then return end
+    if learned[id] and (full or cast[id] or Cr.HasCooldown(id) or (type(c.cd) == "table" and c.cd[id])) then
       -- (Daniel 11.11.2026: "Mitlernen") a recipe seen on a cooldown of a minute or more is kept as one for good
       -- (GetRecipeCooldown: seconds left, isDayCooldown; C_Spell.GetSpellCooldown: { duration }; both unchecked on Forever)
       if not (ns.db.craftCD and ns.db.craftCD[id]) then
@@ -590,24 +622,24 @@ local function ReadWindow()
   if type(info) == "table" and ns.Num(info.skillLevel) then c.skills[prof] = { ns.Num(info.skillLevel), ns.Num(info.maxSkillLevel) or 0 } end
   c.t = time()
   if changed then Cr.ResetMakes() end
-  castSeen = {}
   if full or changed then
     ns.Touch()
     if ns.RefreshSoon then ns.RefreshSoon() elseif ns.Refresh then ns.Refresh() end
   end
 end
 Cr.ReadWindow = function() return ns.Perf("Berufsfenster lesen", ReadWindow) end
+Cr.ReadWindowSliced = function(pause) return ReadWindow(pause) end -- (24.11.2026) inside a job: its slices go to "Job Berufsfenster"
 Cr.ReadWindowReset = function() readSig = {} end -- (tests)
 
 local winPending
 local function WindowSoon()
   if winPending then return end
   winPending = true
-  ns.WhenIdle("Berufsfenster", function() winPending = nil Cr.ReadWindow() end, 0.6)
+  ns.WhenIdle("Berufsfenster", function() winPending = nil ns.Job("Berufsfenster", Cr.ReadWindowSliced) end, 0.6)
 end
-ns.On("PLAYER_LOGIN", function() ns.After(8, function() Cr.Read(true) end) end)
-ns.On("SKILL_LINES_CHANGED", function() ns.After(2, function() Cr.Read() end) end)
-ns.On("NEW_RECIPE_LEARNED", function() ns.After(1, function() Cr.Read(true) end) end)
+ns.On("PLAYER_LOGIN", function() ns.After(8, function() ns.Job("Rezepte lesen", function(p) Cr.Read(true, p) end) end) end)
+ns.On("SKILL_LINES_CHANGED", function() ns.After(2, function() ns.Job("Rezepte prüfen", function(p) Cr.Read(nil, p) end) end) end)
+ns.On("NEW_RECIPE_LEARNED", function() ns.After(1, function() ns.Job("Rezepte lesen", function(p) Cr.Read(true, p) end) end) end)
 ns.On("TRADE_SKILL_SHOW", WindowSoon)
 ns.On("TRADE_SKILL_LIST_UPDATE", WindowSoon)
 

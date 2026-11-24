@@ -1,5 +1,10 @@
 # Profitdon
 
+## 0.2.26
+- Weniger Ruckler: Umbuchen der AH-Verkäufe, Rezepte und Altdaten lesen nach dem Login sowie das Berufsfenster beim Herstellen laufen in kleinen Schritten über mehrere Frames.
+- Das Hauptfenster zeichnet bei neuen Itemdaten nur neu, wenn vorher ein Gegenstand fehlte.
+- /profit diag zeigt unter "Langsam" die teuersten Aufrufe der letzten drei Tage.
+
 ## 0.2.25
 - Favor-Kisten: neuer Schalter "Selbst herstellen" oben rechts. Aus: jedes Bündel wird gekauft (Händler oder AH) statt hergestellt, Gold je Gunst rechnet dann nur mit Kaufen.
 

@@ -1939,7 +1939,14 @@ ns.On("AUCTION_HOUSE_CLOSED", function()
   if W and W:IsShown() then ns.ToggleWindow(false) else ns.Refresh() end
 end)
 ns.On("BAG_UPDATE_DELAYED", function() if W and W:IsShown() and (tab == "debag" or tab == "sell" or IsShop(tab) or tab == "craft" or tab == "ahcraft" or tab == "skill") then ns.RefreshSoon() end end)
-ns.On("GET_ITEM_INFO_RECEIVED", function() ns.RefreshSoon() end)
+-- (24.11.2026, Ruckler, DonMonitor Riverglades: eight hitches of 27 to 66 ms in a minute with the window open) item data
+-- of any addon redrew the whole tab: only when an item was missing since the last look (Core.lua ns.infoMiss)
+local missSeen
+ns.On("GET_ITEM_INFO_RECEIVED", function()
+  if not (W and W:IsShown()) or missSeen == ns.infoMiss then return end
+  missSeen = ns.infoMiss
+  ns.RefreshSoon()
+end)
 ns.OnInit(function()
   local ui = ns.db.ui
   if type(ui) == "table" and ui.craft then tab = ui.craft end

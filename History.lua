@@ -52,9 +52,16 @@ local function RunJob(j, all)
   local was = hurry
   if all then hurry = true end
   sliceStart = Clock() or 0
+  local t0 = sliceStart
   local ok, err = coroutine.resume(j.co)
   while ok and all and coroutine.status(j.co) == "suspended" do ok, err = coroutine.resume(j.co) end
   hurry = was
+  -- (24.11.2026, DonMonitor: Profitdon 3582 ms with no place named) a slice or a job finished at once that took long goes
+  -- into the slow-call log (Core.lua NoteSlow) as "Preisgeschichte"
+  local t1 = Clock()
+  if t1 and ns._NoteSlow and t1 - t0 >= (ns._SLOW_MS or 8) then
+    ns._NoteSlow(all and "Preisgeschichte sofort" or "Preisgeschichte", RunJob, t1 - t0)
+  end
   if not ok then JobDone(j) ns.Try(error, err, 0) end
   if coroutine.status(j.co) == "dead" then JobDone(j) end
 end

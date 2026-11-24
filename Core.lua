@@ -173,8 +173,28 @@ local function NoteSlow(context, fn, ms)
   log.n = (log.n or 0) + 1
   log[(log.n - 1) % SLOW_MAX + 1] = { n = log.n, t = okT and clock or "?", a = ADDON, c = tostring(context),
     f = fnWhere[fn] or "?", ms = math.floor(ms * 10 + 0.5) / 10 }
+  -- (24.11.2026, DonMonitor Laptop: Profitdon 3582 ms at 07:10:22, the ring not saved, nothing named it) the dearest
+  -- calls are also kept in ProfitdonDB.slow (saved, three days, the SLOW_KEEP dearest): /profit diag lists them, and the
+  -- next report from the laptop's SavedVariables names the place
+  local db = ns.db
+  if type(db) == "table" then
+    local list = type(db.slow) == "table" and db.slow or {}
+    db.slow = list
+    local okD, day = pcall(date, "%d.%m. %H:%M:%S")
+    local now = tonumber(time and time()) or 0
+    for i = #list, 1, -1 do if type(list[i]) ~= "table" or now - (tonumber(list[i].at) or 0) > 3 * 86400 then table.remove(list, i) end end
+    local e = { at = now, t = okD and day or "?", c = tostring(context), f = fnWhere[fn] or "?", ms = math.floor(ms * 10 + 0.5) / 10 }
+    if #list < ns.SLOW_KEEP or e.ms > list[#list].ms then
+      list[#list + 1] = e
+      table.sort(list, function(a, b) return a.ms > b.ms end)
+      while #list > ns.SLOW_KEEP do list[#list] = nil end
+    end
+  end
 end
+ns.SLOW_KEEP = 12
 ns._NoteWhere = NoteWhere
+ns._NoteSlow = function(context, fn, ms) pcall(NoteSlow, context, fn, ms) end
+ns._SLOW_MS = SLOW_MS
 
 local said = {}
 function ns.Try(fn, ...)
@@ -234,7 +254,12 @@ end
 function ns.ItemInfo(id)
   local GI = (C_Item and C_Item.GetItemInfo) or GetItemInfo
   local name, link, quality, level, _, _, _, stack, _, icon, sell, class = ns.Call(GI, id)
-  if not name and C_Item and C_Item.RequestLoadItemDataByID then ns.Call(C_Item.RequestLoadItemDataByID, id) end
+  if not name then
+    -- (24.11.2026) counts the asks for an item the game has not loaded: the windows redraw on GET_ITEM_INFO_RECEIVED only
+    -- when this changed since they were drawn (any addon's item data fired a full redraw before)
+    ns.infoMiss = (ns.infoMiss or 0) + 1
+    if C_Item and C_Item.RequestLoadItemDataByID then ns.Call(C_Item.RequestLoadItemDataByID, id) end
+  end
   return name, link, quality, icon, ns.Num(sell), ns.Num(stack), class, ns.Num(level)
 end
 
@@ -386,6 +411,86 @@ function ns.WhenIdle(key, fn, delay)
   NoteWhere(fn, 2) -- (22.11.2026) the slow-call log names each idle job's place, not the first caller's
   if not idleArmed then idleArmed = true ns.After(delay or 0.3, RunIdle) end
 end
+-- (24.11.2026, Ruckler, DonMonitor Laptop at login: `call Report.lua:445` 38.8 ms, `Crafts.lua:191` 9.4 ms,
+-- `Crafts.lua:608` 9.0 ms; Ironforge while cooking: the profession window read up to 27 ms) work of many steps as a
+-- background job, a slice of JOB_MS a frame: fn(pause) runs in a coroutine, pause() yields once the slice is used up.
+-- One job per key: asked again while it waits or runs, it runs once more after it (again). fail(err) after an error.
+-- No pause inside a pcall (the game's Lua 5.1 cannot yield across it, tools/yieldcheck.lua). Without the game's clock
+-- (the tests) the job runs at once. Each slice of SLOW_MS or more goes into the slow-call log ("job <key>").
+ns.JOB_MS = 4
+local jobList, jobFrame = {}, nil
+local function JobClock() local f = rawget(_G, "debugprofilestop") return type(f) == "function" and f or nil end
+local function JobRun(j, all)
+  local clock = JobClock()
+  repeat
+    local t0 = clock and clock() or 0
+    j.start, j.started = t0, true
+    local ok, err = coroutine.resume(j.co)
+    local ms = clock and (clock() - t0) or 0
+    if ms >= SLOW_MS then pcall(NoteSlow, "job " .. j.key, j.fn, ms) end
+    if ns.db then
+      ns.db.perf = type(ns.db.perf) == "table" and ns.db.perf or {}
+      local p = ns.db.perf["Job " .. j.key] or { 0, 0, 0 }
+      p[1], p[2], p[3] = p[1] + 1, p[2] + ms, math.max(p[3], ms)
+      ns.db.perf["Job " .. j.key] = p
+    end
+    if not ok then
+      j.dead = true
+      ns.Try(error, err, 0)
+      if j.fail then ns.Try(j.fail, tostring(err)) end
+    elseif coroutine.status(j.co) == "dead" then
+      j.dead = true
+    end
+  until j.dead or not all
+end
+local function JobNew(key, fn, fail)
+  local j = { key = key, fn = fn, fail = fail }
+  local function pause()
+    if coroutine.running() ~= j.co or j.hurry then return end
+    local clock = JobClock()
+    if clock and clock() - (j.start or 0) >= ns.JOB_MS then coroutine.yield() end
+  end
+  j.co = coroutine.create(function() fn(pause) end)
+  return j
+end
+local function JobTick()
+  local j = jobList[1]
+  while j and j.dead do
+    table.remove(jobList, 1)
+    if j.again then
+      local n = JobNew(j.key, j.fn, j.fail)
+      table.insert(jobList, 1, n)
+    end
+    j = jobList[1]
+  end
+  if not j then if jobFrame then jobFrame:SetScript("OnUpdate", nil) end return end
+  JobRun(j)
+end
+function ns.Job(key, fn, fail)
+  if type(fn) ~= "function" then return end
+  NoteWhere(fn, 2)
+  for _, j in ipairs(jobList) do
+    if j.key == key and not j.dead then j.again = j.started or nil return j end
+  end
+  local j = JobNew(key, fn, fail)
+  if not JobClock() or not CreateFrame then j.hurry = true JobRun(j, true) return j end
+  jobList[#jobList + 1] = j
+  jobFrame = jobFrame or CreateFrame("Frame")
+  jobFrame:SetScript("OnUpdate", JobTick)
+  return j
+end
+-- every job at once (logout; the tests)
+function ns.JobsFinish()
+  for _, j in ipairs(jobList) do
+    if not j.dead then j.hurry = true JobRun(j, true) end
+    if j.again then local n = JobNew(j.key, j.fn, j.fail) n.hurry = true JobRun(n, true) end
+  end
+  jobList = {}
+  if jobFrame then jobFrame:SetScript("OnUpdate", nil) end
+end
+function ns.JobsLeft() local n = 0 for _, j in ipairs(jobList) do if not j.dead or j.again then n = n + 1 end end return n end
+ns.On("PLAYER_LOGOUT", function() ns.JobsFinish() end)
+
 ns.dataVer = 0
 function ns.Touch() ns.dataVer = ns.dataVer + 1 end
 ns.On("BAG_UPDATE_DELAYED", ns.Touch)
@@ -652,6 +757,10 @@ function ns.Diag()
       local k, p = list[i][1], list[i][2]
       add("Zeit " .. k, ("%d× je %.1f ms, höchstens %.0f ms, zusammen %.1f s"):format(p[1], p[2] / math.max(1, p[1]), p[3], p[2] / 1000))
     end
+  end
+  -- (24.11.2026) the dearest single calls of the last three days (ProfitdonDB.slow, Core.lua NoteSlow)
+  for i, e in ipairs(type(ns.db.slow) == "table" and ns.db.slow or {}) do
+    if type(e) == "table" then add("Langsam " .. i, ("%.1f ms %s %s (%s)"):format(tonumber(e.ms) or 0, tostring(e.c), tostring(e.f), tostring(e.t))) end
   end
   add("TSM", ns.Prices and ns.Prices.TSMReady() and "da (DBMarket wird gelesen)" or "nicht da")
   -- (Daniel 14.11.2026: "schau dir den speicher ... an"; the scan line names the Lua memory of all addons together)

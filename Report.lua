@@ -383,22 +383,39 @@ end
 -- (ProfitdonDB.invSeen, 31 days: name, count, gold, cut, mail expiry) whose item a character's recipes make is moved from
 -- "ah" to "craft" in that character's book, on the day the mail was sent (expiry - 30 days) or the first later day that
 -- has enough "ah"; once per invoice (ProfitdonDB.invMoved). Names the client does not know yet wait for the next try.
-function R.MoveCraftSales()
+-- (24.11.2026, Ruckler, DonMonitor Laptop: `call Report.lua:445` 38.8 ms at login) the names of every known recipe of
+-- every character (eight characters, about 680 recipes, one GetItemInfo each) in one go: pause (ns.Job) splits it; the
+-- lists are copied first, so what changes meanwhile (a new invoice, a recipe read) does not disturb the walk
+function R.MoveCraftSales(pause)
   if not (ns.db and type(ns.db.invSeen) == "table" and type(ns.db.crafts) == "table") then return 0 end
+  pause = pause or function() end
   ns.db.invMoved = type(ns.db.invMoved) == "table" and ns.db.invMoved or {}
   local moved, Cr = 0, ns.Crafts
-  -- product name -> characters whose recipes make it
-  local makers = {}
-  for who, c in pairs(ns.db.crafts) do
-    if type(c) == "table" and type(c.known) == "table" then
-      for spell in pairs(c.known) do
-        local r = Cr and Cr.Recipe(spell)
-        local name = r and r.item and r.item > 0 and ns.ItemInfo(r.item)
-        if name then makers[name] = makers[name] or {} makers[name][who] = true end
-      end
+  -- the invoices not moved yet; none: nothing to look up
+  local sigs = {}
+  for sig, list in pairs(ns.db.invSeen) do
+    if type(list) == "table" then
+      for _, exp in ipairs(list) do if not ns.db.invMoved[sig .. "|" .. exp] then sigs[#sigs + 1] = sig break end end
     end
   end
-  for sig, list in pairs(ns.db.invSeen) do
+  -- product name -> characters whose recipes make it
+  local makers = {}
+  if #sigs > 0 then
+    local pairsList = {}
+    for who, c in pairs(ns.db.crafts) do
+      if type(c) == "table" and type(c.known) == "table" then
+        for spell in pairs(c.known) do pairsList[#pairsList + 1] = { who, spell } end
+      end
+    end
+    for k, e in ipairs(pairsList) do
+      if k % 4 == 0 then pause() end
+      local r = Cr and Cr.Recipe(e[2])
+      local name = r and r.item and r.item > 0 and ns.ItemInfo(r.item)
+      if name then makers[name] = makers[name] or {} makers[name][e[1]] = true end
+    end
+  end
+  for _, sig in ipairs(sigs) do
+    local list = ns.db.invSeen[sig]
     local name, count, bid, cut = sig:match("^(.*)|(%d+)|(%d+)|(%d+)$")
     local who = name and makers[name]
     if who and type(list) == "table" then
@@ -442,7 +459,7 @@ function R.MoveCraftSales()
 end
 
 ns.On("MAIL_INBOX_UPDATE", function() R.ReadInvoices() end)
-ns.On("PLAYER_LOGIN", function() ns.After(15, function() R.MoveCraftSales() end) end)
+ns.On("PLAYER_LOGIN", function() ns.After(15, function() ns.Job("AH-Verkäufe umbuchen", R.MoveCraftSales) end) end)
 ns.On("PLAYER_MONEY", function() R.Snapshot() end)
 ns.On("PLAYER_ENTERING_WORLD", function() ns.After(5, function() R.Snapshot(true) end) end)
 ns.On("BAG_UPDATE_DELAYED", function() ns.WhenIdle("Goldverlauf", R.Snapshot) end)

@@ -1,4 +1,4 @@
-local Bz = LibStub("DonCore-1.0"):NewModule("Blizz", 11)
+local Bz = LibStub("DonCore-1.0"):NewModule("Blizz", 12)
 if not Bz then return end
 
 ---------------------------------------------------------------------------
@@ -45,7 +45,7 @@ local K = setmetatable({}, { __index = Kit or {} })
 Bz.kit = K
 Bz.K = K -- (Profitdon's name for the kit)
 K.blizzLook = true -- a caller can tell the two kits apart
-Bz.VERSION = 11
+Bz.VERSION = 12
 Bz.ROW_H = 24 -- the row height of Bz.List without opts.rowHeight (Profitdon's craft and sell lists)
 if Bz.light == nil then Bz.light = true end
 
@@ -91,6 +91,12 @@ function Bz.Ready()
 end
 
 local function Part(f, key) local p = f and f[key] return type(p) == "table" and p or nil end
+-- (minor 12, 23.11.2026, Elmer Fudd: "Das X rechts oben ... Die Klickfläche ist bei mir leicht offset") the title strip
+-- drags, so it takes the mouse; the game puts it on frame level 510 like the red X and lets it reach 2 px into the X.
+-- The X goes one level above the strip, so its whole face closes.
+local function CloseOnTop(close, tc)
+  if close and tc and close.SetFrameLevel and tc.GetFrameLevel then close:SetFrameLevel((tc:GetFrameLevel() or 0) + 1) end
+end
 
 -- (Daniel 15.11.2026, Bild neben dem Auktionshaus: "wie es aussieht mit den etwas helleren farben (siehe auktionshaus
 -- fenster)") the frame template's own ground is nearly black; the auction house beside it is a warm brown with
@@ -255,6 +261,7 @@ function Bz.Window(name, opts)
   if tc then drag(tc) end
   local close = Part(f, "CloseButton")
   if close then close:SetScript("OnClick", function() f:Hide() end) end
+  CloseOnTop(close, tc)
   f.inset = Part(f, "Inset") or f
   Bz.Lighten(f)
   function f:Layout()
@@ -2762,6 +2769,7 @@ function K.Dialog(name, opts)
   d.head = type(d.TitleContainer) == "table" and d.TitleContainer or d
   d.close = type(d.CloseButton) == "table" and d.CloseButton or nil
   if d.close then d.close:SetScript("OnClick", function() d:Hide() end) end
+  CloseOnTop(d.close, Part(d, "TitleContainer"))
   d.body = CreateFrame("Frame", nil, d)
   d.body:SetPoint("TOPLEFT", D_SIDE, -D_TOP)
   d.buttons = {}
