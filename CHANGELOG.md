@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.47
+- Master Chef wird je Charakter gemerkt statt einmal für alle. Ein Char, der selbst kocht, rechnet mit seinem eigenen Stand. Ein Char ohne Kochen (etwa am Auktionshaus) rechnet mit dem Stand deines besten Kochs. Der Tooltip des Symbols sagt, wessen Stand gilt.
+
 ## 0.2.46
 - Zwei runde Symbole oben rechts über den Listen: Master Chef und Boosted Disenchanting. Farbig, solange der Bonus eingerechnet ist, sonst grau. Der Tooltip sagt, womit gerechnet wird (Rang und Chance beim Kochen, auch für ungelernte Rezepte; Verzauberer, Buff und Prozent beim Entzaubern).
 

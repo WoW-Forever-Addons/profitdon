@@ -188,6 +188,12 @@ local function LegacyNow(pause)
   end
   local old = ns.db.legacyChef
   ns.db.legacyChef = { rank = res.rank, pct = res.pct, t = time(), max = res.max, icon = res.icon, who = ns.Me and ns.Me() or nil }
+  -- (Daniel 24.11.2026: "Wieso nicht immer neu einlesen pro Charakter login?") read at every login it was, but kept in
+  -- one place for all: the state of every character is kept by its name now (Cr.Chef picks whose counts)
+  if ns.db.legacyChef.who then
+    ns.db.legacyBy = type(ns.db.legacyBy) == "table" and ns.db.legacyBy or {}
+    ns.db.legacyBy[ns.db.legacyChef.who] = ns.db.legacyChef
+  end
   ns.Fact("legacyChef", ("%s Rang %d%s: %d %% Extra-Ergebnis beim Kochen (%s)%s"):format(Cr.CHEF_NAME, res.rank,
     res.max and ("/" .. res.max) or "", res.pct, res.from, why and (", " .. why) or ""))
   if not (old and old.pct == res.pct) then
@@ -199,13 +205,43 @@ end
 local function LegacyJob()
   ns.Job("Legacy lesen", LegacyNow, function(err) ns.Fact("legacyChef", "Fehler: " .. tostring(err)) end)
 end
-ns.On("PLAYER_LOGIN", function() ns.After(6, LegacyJob) end)
+-- at login the state kept is the last character's: this character's own from its last visit takes its place until
+-- the tree is read (a character never read counts without)
+function Cr.LegacyLogin()
+  if not ns.db then return end
+  local me, c = ns.Me(), ns.db.legacyChef
+  ns.db.legacyBy = type(ns.db.legacyBy) == "table" and ns.db.legacyBy or {}
+  if type(c) == "table" and c.who and not ns.db.legacyBy[c.who] then ns.db.legacyBy[c.who] = c end
+  if type(c) == "table" and c.who and c.who ~= me then
+    ns.db.legacyChef = ns.db.legacyBy[me]
+    if Cr.ResetMakes then Cr.ResetMakes() end
+    if ns.Touch then ns.Touch() end
+  end
+end
+ns.On("PLAYER_LOGIN", function() Cr.LegacyLogin() ns.After(6, LegacyJob) end)
 ns.On("TRAIT_CONFIG_UPDATED", function() ns.After(1, LegacyJob) end)
 ns.LegacyNow = LegacyNow -- (tests)
 -- the extra result of a recipe's profession in percent (0 without)
+-- (Daniel 24.11.2026) whose Master Chef counts: this character's own when it cooks; a character without Cooking
+-- (the banker at the AH) reckons with the best cook among the own characters, as read at that one's last login.
+-- Returns the state { rank, pct, max, icon, who } or nil, and the cook's name when it is another character's.
+function Cr.Chef()
+  local db = ns.db
+  if not db then return nil end
+  local own = db.legacyChef
+  if Cr.MySkill(Cr.COOKING) or type(db.legacyBy) ~= "table" then return own end
+  local best, who
+  for name, c in pairs(db.legacyBy) do
+    local cr = type(db.crafts) == "table" and db.crafts[name]
+    if c ~= own and type(c) == "table" and type(cr) == "table" and type(cr.skills) == "table" and cr.skills[Cr.COOKING]
+      and (tonumber(c.pct) or 0) > (best and tonumber(best.pct) or 0) then best, who = c, name end
+  end
+  if best then return best, who end
+  return own
+end
 function Cr.BonusPct(r)
   if not (r and r.prof == Cr.COOKING) then return 0 end
-  local c = ns.db and ns.db.legacyChef
+  local c = Cr.Chef()
   return type(c) == "table" and tonumber(c.pct) or 0
 end
 
@@ -215,7 +251,7 @@ end
 -- read here: Master Chef as last read from the Legacy tree, the buff as Disenchant.lua sees it on the character.
 Cr.CHEF_ICON, Cr.DE_ICON, Cr.ENCHANTING = "Interface\\Icons\\INV_Misc_Food_15", "Interface\\Icons\\INV_Enchant_Disenchant", 333
 function Cr.Perks()
-  local c = ns.db and ns.db.legacyChef
+  local c, cook = Cr.Chef()
   local read = type(c) == "table"
   local pct, rank = read and tonumber(c.pct) or 0, read and tonumber(c.rank) or 0
   local chef = { key = "chef", on = pct > 0, icon = read and c.icon or Cr.CHEF_ICON,
@@ -229,7 +265,9 @@ function Cr.Perks()
   else
     chef.lines = { "Legacy-Baum noch nicht gelesen: Kochrezepte sind ohne Extra-Ergebnis gerechnet." }
   end
-  if read and c.who then chef.lines[#chef.lines + 1] = "Gelesen bei " .. (ns.Skill and ns.Skill.Short and ns.Skill.Short(c.who) or tostring(c.who)) .. "." end
+  local function Short(n) return ns.Skill and ns.Skill.Short and ns.Skill.Short(n) or tostring(n) end
+  if cook then chef.lines[#chef.lines + 1] = ("Dieser Char kocht nicht: gerechnet mit dem Stand von %s."):format(Short(cook))
+  elseif read and c.who then chef.lines[#chef.lines + 1] = "Stand dieses Chars (" .. Short(c.who) .. "), bei jedem Login neu gelesen." end
 
   local DE = ns.DE
   local skill = Cr.MySkill(Cr.ENCHANTING)
