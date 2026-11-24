@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.38
+- Beim Händler kaufen: führt der Händler einzelne Käufe einer Runde nicht aus, merkt Profitdon das am Gold und kauft das Fehlende von selbst nach. Die Zeile im Chat nennt, was wirklich bezahlt wurde.
+
 ## 0.2.37
 - Auswertung: beim Verlassen der Welt (Ausloggen, Ladebildschirm) wurde das ganze Gold einmal als "Unterhalt" ausgegeben gebucht. Das passiert nicht mehr; die alten Fehlbuchungen werden beim nächsten Login einmal herausgenommen.
 - Auswertung: "Gesamt" zeigte nur den heutigen Tag, jetzt alles seit Beginn (auch "Je Produkt").

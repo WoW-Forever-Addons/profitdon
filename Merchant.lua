@@ -685,19 +685,64 @@ local function Round()
       if run then
         if not run.got[e.id] then run.got[e.id] = 0 run.order[#run.order + 1] = e.id end
         run.got[e.id], run.cost = run.got[e.id] + n, run.cost + cost
+        run.calls = run.calls or {}
+        run.calls[e.id] = run.calls[e.id] or {}
+        table.insert(run.calls[e.id], { n, cost })
       end
     end
     end
   end
   return done, units
 end
-local function Next()
+-- (Daniel 24.11.2026, Bild Chat: "er schreibt er hätte 760 gekauft, hatte aber nur 640 und dann habe ich noch 120
+-- nachkaufen müssen") the run counted its calls, and the vendor does not carry out every call of a round. After the last
+-- round the gold says what was really paid (the bags lag, the gold of a purchase not carried out never goes): once it
+-- stands still over two looks ROUND_SEC apart and less went than the calls cost, the calls not carried out are taken
+-- back (per item what the bags lack of it, never more than the gold kept) and bought again, at most MAX_RETRY times.
+-- The line in the chat names what was paid for.
+local MAX_RETRY = 3
+local Next
+local function Money() return ns.Num(ns.Call(GetMoney)) or 0 end
+local function TakeBack()
+  local short = run.cost - (run.gold0 - Money())
+  local bags, any = ns.Bags(), false
+  for _, id in ipairs(run.order) do
+    local miss = (run.got[id] or 0) - math.max(0, (bags[id] or 0) - (run.have0[id] or 0))
+    local calls = run.calls and run.calls[id] or {}
+    while miss > 0 and #calls > 0 and calls[#calls][1] <= miss and calls[#calls][2] <= short do
+      local c = table.remove(calls)
+      miss, short = miss - c[1], short - c[2]
+      run.got[id], run.cost = run.got[id] - c[1], run.cost - c[2]
+      if ns.Ledger then ns.Ledger.Unexpect("craft", -c[2]) end
+      if ns.RecipeLog and ns.RecipeLog.Unbought then ns.RecipeLog.Unbought(id, c[1], c[2]) end
+      any = true
+    end
+  end
+  return any
+end
+local function Verify()
+  if not run then return end
+  if not (panel and panel:IsShown()) then Bought() return end
+  local short = run.cost - (run.gold0 - Money())
+  if short <= 0 then Bought() return end
+  run.looks = (run.looks or 0) + 1
+  if run.short ~= short and run.looks < 4 then run.short = short ns.After(ROUND_SEC, Verify) return end
+  run.short, run.looks = nil, nil
+  local back = TakeBack()
+  ns.Fact("matsShort", ("%s fehlten nach %d Runden, %s"):format(ns.Money(short), run.rounds, back and "nachgekauft" or "nicht zuzuordnen"))
+  run.retry = (run.retry or 0) + 1
+  if back and run.retry <= MAX_RETRY and run.rounds < MAX_ROUNDS then Next() else Bought() end
+end
+local function Settled()
+  if run and run.gold0 and run.cost > 0 then ns.After(ROUND_SEC, Verify) else Bought() end
+end
+function Next()
   if not run then return end
   if not (panel and panel:IsShown()) then Bought() return end
   run.rounds = run.rounds + 1
   local done = Round()
   matsAt = GetTime()
-  if done >= MAX_PER_CLICK and run.rounds < MAX_ROUNDS then ns.After(ROUND_SEC, Next) else Bought() end
+  if done >= MAX_PER_CLICK and run.rounds < MAX_ROUNDS then ns.After(ROUND_SEC, Next) else Settled() end
   Label()
 end
 -- only: a set of ids (the picked row's "Kaufen"), nil: all rows ("Alle kaufen"); the counts of the fields
@@ -707,6 +752,8 @@ function MatsClick(only)
   matsAt = now
   run = { got = {}, order = {}, cost = 0, rounds = 1, target = {}, only = only }
   for _, e in ipairs(BuyPlan(only)) do run.target[e.id] = e.units end
+  run.gold0, run.have0 = Money(), {}
+  for id, n in pairs(ns.Bags()) do if run.target[id] then run.have0[id] = n end end
   run.fixed = MatsFixed
   local jobsNow = MatsJobs or {}
   local done = Round()
@@ -718,7 +765,7 @@ function MatsClick(only)
       if Cr.JobAdd and not (Cr.JobLeft and Cr.JobLeft(j[1])) then Cr.JobAdd(j[1], j[2], v and v.r.spell == j[1] and v.mode or nil) end
     end
   end
-  if done >= MAX_PER_CLICK then ns.After(ROUND_SEC, Next) else Bought() end
+  if done >= MAX_PER_CLICK then ns.After(ROUND_SEC, Next) else Settled() end
   Label()
   ns.After(0.8, Label)
 end

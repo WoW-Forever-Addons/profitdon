@@ -75,6 +75,14 @@ function RL.Bought(id, qty, cost)
   b.q, b.c, b.t = b.q + qty, b.c + cost, time()
 end
 
+-- (24.11.2026, Merchant.lua TakeBack) a purchase counted that the vendor did not carry out
+function RL.Unbought(id, qty, cost)
+  id, qty, cost = ns.Num(id), ns.Num(qty), ns.Num(cost)
+  if not (ns.db and id and qty and cost and qty > 0 and IsPart(id)) then return end
+  local b = Basis(id, true)
+  b.q, b.c = math.max(0, b.q - qty), math.max(0, b.c - cost)
+end
+
 local pending, lastCast = {}, {}
 function RL._Reset() parts, pending, lastCast = nil, {}, {} end -- (tests)
 function RL.Cast(spell)
