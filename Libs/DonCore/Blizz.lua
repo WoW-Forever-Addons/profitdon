@@ -1,4 +1,4 @@
-local Bz = LibStub("DonCore-1.0"):NewModule("Blizz", 13)
+local Bz = LibStub("DonCore-1.0"):NewModule("Blizz", 14)
 if not Bz then return end
 
 ---------------------------------------------------------------------------
@@ -45,7 +45,7 @@ local K = setmetatable({}, { __index = Kit or {} })
 Bz.kit = K
 Bz.K = K -- (Profitdon's name for the kit)
 K.blizzLook = true -- a caller can tell the two kits apart
-Bz.VERSION = 13
+Bz.VERSION = 14
 Bz.ROW_H = 24 -- the row height of Bz.List without opts.rowHeight (Profitdon's craft and sell lists)
 if Bz.light == nil then Bz.light = true end
 
@@ -1783,13 +1783,86 @@ PART.row = {
   end,
 }
 
+-- (minor 13) the game's bar for the head of a group, for the List's kind "group" and K.GroupHeader
+local BAR_LEFT, BAR_MID = "Options_ListExpand_Left", "_Options_ListExpand_Middle"
+local BAR_PLUS, BAR_MINUS = "Options_ListExpand_Right", "Options_ListExpand_Right_Expanded"
+local BAR_TEXT_X, BAR_H = 10, 26
+local function AtlasInfo(name)
+  local T = C_Texture
+  if type(T) ~= "table" or type(T.GetAtlasInfo) ~= "function" then return nil end
+  local ok, info = pcall(T.GetAtlasInfo, name)
+  if ok and type(info) == "table" and (tonumber(info.width) or 0) > 0 and (tonumber(info.height) or 0) > 0 then return info end
+  return nil
+end
+local barInfo
+local function BarInfo()
+  if barInfo == nil then
+    local l, m, p, o = AtlasInfo(BAR_LEFT), AtlasInfo(BAR_MID), AtlasInfo(BAR_PLUS), AtlasInfo(BAR_MINUS)
+    barInfo = (l and m and p and o) and { left = l, plus = p, minus = o } or nil
+  end
+  return barInfo
+end
+function Bz.GroupBar() return BarInfo() ~= nil end
+
+-- one set of the three slices on a row; hot = the highlight over it (added, 0.4 as the game's template)
+local function BarSet(r, info, h, hot)
+  local set = { h = h, info = info }
+  local function Slice()
+    local t = r:CreateTexture(nil, hot and "BORDER" or "BACKGROUND")
+    if hot then
+      if t.SetBlendMode then t:SetBlendMode("ADD") end
+      t:SetAlpha(0.4)
+    end
+    return t
+  end
+  set.left, set.right, set.mid = Slice(), Slice(), Slice()
+  set.left:SetAtlas(BAR_LEFT)
+  set.mid:SetAtlas(BAR_MID)
+  set.left:SetPoint("LEFT", 0, 0)
+  set.right:SetPoint("RIGHT", 0, 0)
+  set.mid:SetPoint("TOPLEFT", set.left, "TOPRIGHT", 0, 0)
+  set.mid:SetPoint("BOTTOMRIGHT", set.right, "BOTTOMLEFT", 0, 0)
+  -- sign "+" / "-" or nil (no folding: the left end mirrored); gives the width of the right end
+  function set:Set(sign, indent)
+    local i = sign == "+" and self.info.plus or sign == "-" and self.info.minus or nil
+    local t = self.right
+    if i then
+      t:SetAtlas(sign == "+" and BAR_PLUS or BAR_MINUS)
+      t:SetSize(i.width * (self.h / i.height), self.h)
+    else
+      local l = self.info.left
+      t:SetAtlas(BAR_LEFT)
+      if l.leftTexCoord and l.rightTexCoord and l.topTexCoord and l.bottomTexCoord then
+        t:SetTexCoord(l.rightTexCoord, l.leftTexCoord, l.topTexCoord, l.bottomTexCoord)
+      end
+      t:SetSize(l.width * (self.h / l.height), self.h)
+    end
+    local l0 = self.info.left
+    self.left:SetSize(l0.width * (self.h / l0.height), self.h)
+    self.left:ClearAllPoints()
+    self.left:SetPoint("LEFT", indent or 0, 0)
+    return i and i.width * (self.h / i.height) or 0
+  end
+  function set:SetShown(on)
+    for _, t in ipairs({ self.left, self.right, self.mid }) do if on then t:Show() else t:Hide() end end
+  end
+  return set
+end
+
 -- kind "group": the game's plus or minus button, gold text, a number on the right
 -- (minor 7) it.indent: pixels the button and the text move right (a sub group, Profitdon writs: zones under continents)
 PART.group = {
   build = function(p)
-    p.band = p:CreateTexture(nil, "BACKGROUND")
-    p.band:SetPoint("TOPLEFT", 0, -1) p.band:SetPoint("BOTTOMRIGHT", 0, 1)
-    p.band:SetColorTexture(1, 0.82, 0, 0.07)
+    -- (minor 14, Daniel 24.11.2026, picture of Profitdon's categories: "hatten wir das nicht geändert?") the game's bar
+    -- here too, as K.GroupHeader has it; without the atlases the band and the plus button on the left
+    local info = BarInfo()
+    if info then
+      p.bar = BarSet(p, info, BAR_H, false)
+    else
+      p.band = p:CreateTexture(nil, "BACKGROUND")
+      p.band:SetPoint("TOPLEFT", 0, -1) p.band:SetPoint("BOTTOMRIGHT", 0, 1)
+      p.band:SetColorTexture(1, 0.82, 0, 0.07)
+    end
     p.arrow = p:CreateTexture(nil, "ARTWORK")
     p.arrow:SetSize(14, 14)
     p.arrow:SetPoint("LEFT", 8, 0)
@@ -1798,8 +1871,28 @@ PART.group = {
     p.count:SetJustifyH("RIGHT")
     p.count:SetPoint("RIGHT", -12, 0)
   end,
-  fill = function(p, it, w)
+  fill = function(p, it, w, h)
     local ind = tonumber(it.indent) or 0
+    if p.bar then
+      local rh = tonumber(h) or 0
+      p.bar.h = (rh > 4 and rh - 2 < BAR_H) and rh - 2 or BAR_H
+      local cap = p.bar:Set((not it.static) and (it.collapsed and "+" or "-") or nil, ind)
+      if cap <= 0 then cap = BAR_TEXT_X end
+      p.cap = cap
+      p.arrow:Hide()
+      p.text:SetText(it.text or "")
+      p.text:SetTextColor(Col3(it.color, GOLD))
+      p.text:ClearAllPoints()
+      p.text:SetPoint("LEFT", BAR_TEXT_X + ind, 0)
+      local right = it.right ~= nil and tostring(it.right) or ""
+      if it.count ~= nil and tostring(it.count) ~= right then right = right .. (right ~= "" and "  " or "") .. tostring(it.count) end
+      p.count:SetText(right)
+      p.count:ClearAllPoints()
+      p.count:SetPoint("RIGHT", -cap - 2, 0)
+      local cw = right ~= "" and math.max(24, math.min(math.floor(w * 0.45), Width(p.count) + 4)) or 0
+      p.text:SetWidth(math.max(20, w - BAR_TEXT_X - ind - cw - cap - 10))
+      return
+    end
     p.arrow:ClearAllPoints()
     p.arrow:SetPoint("LEFT", 8 + ind, 0)
     if it.static then p.arrow:Hide()
@@ -3179,71 +3272,6 @@ end
 -- with the minus), the text on the left in gold, white under the mouse, the count before the plus. A head that does not
 -- fold (item.static) closes with the left end mirrored. A client without these atlases keeps the look before: a light
 -- gold band, the game's plus and minus buttons on the left. r.arrow keeps the Kit's calls (SetText "+", "-" or "").
-local BAR_LEFT, BAR_MID = "Options_ListExpand_Left", "_Options_ListExpand_Middle"
-local BAR_PLUS, BAR_MINUS = "Options_ListExpand_Right", "Options_ListExpand_Right_Expanded"
-local BAR_TEXT_X, BAR_H = 10, 26
-local function AtlasInfo(name)
-  local T = C_Texture
-  if type(T) ~= "table" or type(T.GetAtlasInfo) ~= "function" then return nil end
-  local ok, info = pcall(T.GetAtlasInfo, name)
-  if ok and type(info) == "table" and (tonumber(info.width) or 0) > 0 and (tonumber(info.height) or 0) > 0 then return info end
-  return nil
-end
-local barInfo
-local function BarInfo()
-  if barInfo == nil then
-    local l, m, p, o = AtlasInfo(BAR_LEFT), AtlasInfo(BAR_MID), AtlasInfo(BAR_PLUS), AtlasInfo(BAR_MINUS)
-    barInfo = (l and m and p and o) and { left = l, plus = p, minus = o } or nil
-  end
-  return barInfo
-end
-function Bz.GroupBar() return BarInfo() ~= nil end
-
--- one set of the three slices on a row; hot = the highlight over it (added, 0.4 as the game's template)
-local function BarSet(r, info, h, hot)
-  local set = { h = h, info = info }
-  local function Slice()
-    local t = r:CreateTexture(nil, hot and "BORDER" or "BACKGROUND")
-    if hot then
-      if t.SetBlendMode then t:SetBlendMode("ADD") end
-      t:SetAlpha(0.4)
-    end
-    return t
-  end
-  set.left, set.right, set.mid = Slice(), Slice(), Slice()
-  set.left:SetAtlas(BAR_LEFT)
-  set.mid:SetAtlas(BAR_MID)
-  local k = h / info.left.height
-  set.left:SetSize(info.left.width * k, h)
-  set.left:SetPoint("LEFT", 0, 0)
-  set.right:SetPoint("RIGHT", 0, 0)
-  set.mid:SetPoint("TOPLEFT", set.left, "TOPRIGHT", 0, 0)
-  set.mid:SetPoint("BOTTOMRIGHT", set.right, "BOTTOMLEFT", 0, 0)
-  -- sign "+" / "-" or nil (no folding: the left end mirrored); gives the width of the right end
-  function set:Set(sign, indent)
-    local i = sign == "+" and self.info.plus or sign == "-" and self.info.minus or nil
-    local t = self.right
-    if i then
-      t:SetAtlas(sign == "+" and BAR_PLUS or BAR_MINUS)
-      t:SetSize(i.width * (self.h / i.height), self.h)
-    else
-      local l = self.info.left
-      t:SetAtlas(BAR_LEFT)
-      if l.leftTexCoord and l.rightTexCoord and l.topTexCoord and l.bottomTexCoord then
-        t:SetTexCoord(l.rightTexCoord, l.leftTexCoord, l.topTexCoord, l.bottomTexCoord)
-      end
-      t:SetSize(l.width * (self.h / l.height), self.h)
-    end
-    self.left:ClearAllPoints()
-    self.left:SetPoint("LEFT", indent or 0, 0)
-    return i and i.width * (self.h / i.height) or 0
-  end
-  function set:SetShown(on)
-    for _, t in ipairs({ self.left, self.right, self.mid }) do if on then t:Show() else t:Hide() end end
-  end
-  return set
-end
-
 function K.GroupHeader(parent)
   local r = RowSkin(Kit.GroupHeader(parent))
   BlizzFonts(r, { text = "GameFontNormal", count = "GameFontHighlightSmall" })

@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.33
+- Blizzard-Look: die Kopfzeilen der Listen (Kategorien in Kaufen, Gruppen in den anderen Listen) sind jetzt die Leiste des Spiels, Plus und Minus stehen rechts.
+
 ## 0.2.32
 - Eigene Einkaufslisten gehören jetzt dem Char, der sie anlegt. Chip "Nur meine Listen" / "Listen aller Chars" im Reiter Einkaufsliste schaltet die Listen der anderen Chars des Accounts dazu (mit Charname am Chip).
 - Rechtsklick auf eine fremde Liste: "Auf diesen Char kopieren" oder "Zu diesem Char verschieben". Eine Kopie nimmt beim erneuten Kopieren nur die fehlenden Einträge, und die fremde Liste steht neben ihrer Kopie nicht noch einmal da.
