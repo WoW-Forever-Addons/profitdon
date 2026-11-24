@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.45
+- Einkaufsliste: Rechtsklick auf eine Zeile, die du selbst herstellen würdest, bietet "Fertig kaufen statt herstellen". Die Zeile kauft dann das fertige Produkt (Händler oder AH), die Mats darunter fallen weg, und sie nennt, was Herstellen je Stück gekostet hätte. Gilt nur für diesen Einkauf; "Wieder selbst herstellen" stellt vorher zurück.
+
 ## 0.2.44
 - Herstellfenster: die Zeile "Braucht ..." färbt jedes Teil einzeln wie das Spiel. Werkzeug in den Taschen (Hammer, Spanner) ist weiß, auch wenn der Amboss noch fehlt und rot bleibt.
 - "Auf die Einkaufsliste" und "Auf Liste ..." springen nicht mehr zur Liste. Die Seite bleibt, wo du bist; der Menüeintrag "schon drauf: öffnen" zeigt die Liste weiterhin.

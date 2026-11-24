@@ -1280,6 +1280,16 @@ local function max1(n) return math.max(1, math.floor(tonumber(n) or 1)) end
 
 -- the cheapest known recipe that makes id: cost of one unit made, the recipe
 -- (07.11.2026) a recipe this character can make but a mat lacks a price: no cost, but the recipe still (the tree shows it)
+-- (Daniel 24.11.2026) items the shopping list buys ready instead of making them, chosen by right click on the row;
+-- the choice ends with the purchase (Buy.lua ns.RecordBuy)
+function Cr.BuyReady(id) local t = ns.db and ns.db.buyReady return t and t[id] and true or false end
+function Cr.SetBuyReady(id, on)
+  if not id then return end
+  ns.db.buyReady = ns.db.buyReady or {}
+  ns.db.buyReady[id] = on and true or nil
+  Cr.cache = nil
+end
+
 local function Route(id)
   local best, via, any
   for _, r in ipairs(Cr.MakesItem(id) or {}) do
@@ -1442,6 +1452,19 @@ function Cr.ShoppingList(entries, grouped)
     local way = fixedNow and 0 or math.min(total - held, math.max(0, wayLeft[id] or 0))
     wayLeft[id] = (wayLeft[id] or 0) - way
     local need = total - held - way
+    -- (Daniel 24.11.2026: "will ich manchmal aus faulheit direkt das fertige produkt kaufen nicht erst herstellen",
+    -- gewählt "Je Zeile" und "Nur dieser Einkauf") an item marked by right click is bought ready, whatever making it
+    -- would save: vendor or AH, no mats below. readyEach: what one made would cost, for the row's words.
+    local ready, readyEach = Cr.BuyReady(id), nil
+    if ready then
+      local each, r = Route(id)
+      if r then readyEach = each elseif src ~= "craft" then ready = false end
+      if src == "craft" then
+        readyEach = readyEach or unit
+        local vu = ns.Prices.VendorUnit(id)
+        if vu then src, unit, via = "vendor", vu, nil else src, unit, via = "ah", ns.Prices.Buy(id, math.max(1, need)), nil end
+      end
+    end
     -- (Durchsicht 15.11.2026) at the depth limit a made reagent is not opened any more: it stood there as "make" without
     -- mats and cost nothing (long chains, leather). It is bought there: vendor or AH, without a price the list has none.
     if src == "craft" and depth >= 3 + base then
@@ -1451,7 +1474,7 @@ function Cr.ShoppingList(entries, grouped)
     -- (Durchsicht 15.11.2026) buy or make was settled at the price of 20 units; many more cost more: 20 at 1s, then 10s,
     -- made 2s, 500 units stayed "buy" at 9s 60c. Settled again at the amount needed.
     -- (22.11.2026) the casting time counts here too (Cr.GoldHour)
-    if src == "ah" and need > 20 and depth < 3 + base then
+    if src == "ah" and need > 20 and depth < 3 + base and not ready then
       local each, r = Route(id)
       local at = each and r and ns.Prices.Buy(id, (taken[id] or 0) + need)
       local sec = at and (Cr.Time(r) or 0) / Cr.Avg(r) or 0
@@ -1468,13 +1491,14 @@ function Cr.ShoppingList(entries, grouped)
       cost = (src ~= "craft" and unit) and unit * need or nil, maxUnit = unit and math.max(unit + 2, math.ceil(unit * 1.25)) or nil, via = via,
       short = short or nil, live = live or nil, none = none or nil, timeBuy = timeBuy,
       forItem = headItem, forRuns = headRuns, forVia = forVia, forSpell = headSpell,
-      fixed = fixedNow or nil } -- (24.11.2026, Merchant.lua MatsPlan)
+      fixed = fixedNow or nil, -- (24.11.2026, Merchant.lua MatsPlan)
+      buyReady = ready or nil, readyEach = readyEach }
     out[#out + 1] = e
     -- (Daniel 06.11.2026: "unter rough powder eingerückt dann rough stone sehen ... bei den anderen rezepten natürlich auch")
     -- bought, but a known recipe makes it: its mats indented below as the other way, with what one unit costs made
     -- (Daniel 07.11.2026: "auch wenn was in den taschen da ist, ich will den baum, vielleicht will ich ja mehr als 20 machen")
     -- all in the bags: the way to make it still shows, for the whole amount
-    if ((need > 0 and src ~= "craft") or need == 0) and depth < 3 + base then
+    if ((need > 0 and src ~= "craft") or need == 0) and depth < 3 + base and not ready then
       local each, r = Route(id)
       if r then
         local crafts = math.ceil((need > 0 and need or total) / Cr.Avg(r))

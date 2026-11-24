@@ -817,6 +817,9 @@ local function Rows()
           end
           local sub = (e.alt and "oder herstellen: " or "") .. srcText .. (e.crafts and (", %d× herstellen"):format(e.crafts) or "") .. (e.held > 0 and (", %d da"):format(e.held) or "") .. BankBit(e)
             .. (e.way and (", %d im Briefkasten"):format(e.way) or "")
+          if e.buyReady then
+            sub = sub .. ", fertig gekauft statt hergestellt" .. (e.readyEach and (" (hergestellt %s je Stück)"):format(M(e.readyEach)) or "")
+          end
           if e.way and not e.alt then wayN = wayN + 1 end
           if optional then sub = ("freiwillig (%s ist da): nur, wenn du mehr davon selbst herstellen willst"):format((ItemName(e.forVia))) end
           if e.altEach then
@@ -1852,9 +1855,20 @@ local function OnRowClick(it, button)
   if button == "RightButton" then
     -- (Daniel 24.11.2026: "rechtsklick im ah ansehen geht nicht mehr") the entry's menu begins with the AH search again
     if e and e.head and e.listId then ns.ListEntryMenu(e, ns.FindItems(it)) return end
-    if it.listHead then ns.ListEntryMenu(it.listHead, ns.FindItems(it)) return end
+    -- (Daniel 24.11.2026: "direkt das fertige produkt kaufen nicht erst herstellen") a row the list would make: buy it
+    -- ready for this purchase, and back
+    local first = ns.FindItems(it)
+    if e and not e.head and not e.alt and e.id and (e.buyReady or (e.src == "craft" and e.via)) then
+      local id, on = e.id, not e.buyReady
+      first = first or {}
+      first[#first + 1] = { text = on and "Fertig kaufen statt herstellen" or "Wieder selbst herstellen", onClick = function()
+        ns.Crafts.SetBuyReady(id, on)
+        ns.Refresh()
+      end }
+    end
+    if it.listHead then ns.ListEntryMenu(it.listHead, first) return end
     local kind, key = ns.ListTarget(it)
-    if kind then ns.ListAddMenu(kind, key, it.title, ns.FindItems(it)) end
+    if kind then ns.ListAddMenu(kind, key, it.title, first) end
     return
   end
   W.msg = nil

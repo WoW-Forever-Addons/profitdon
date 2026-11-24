@@ -374,6 +374,8 @@ function ns.RecordBuy(id, qty, cost, kind)
   elseif kind == "mats" then
     if ns.RecipeLog then ns.RecipeLog.Bought(id, qty, cost) end -- (16.11.2026) the mat's price for what it goes into
     if B.entry and B.entry.id == id and B.entry.need then B.entry.need = math.max(0, B.entry.need - qty) end
+    -- (Daniel 24.11.2026, gewählt "Nur dieser Einkauf") bought ready instead of made: with the row filled the choice ends
+    if B.entry and B.entry.id == id and B.entry.buyReady and (B.entry.need or 0) <= 0 and ns.Crafts then ns.Crafts.SetBuyReady(id, false) end
     -- (Durchsicht Runde 2) the purchase lies in the mailbox: the shopping list counts it as on the way
     ns.OnWayAdd(id, qty)
     -- (Daniel 15.11.2026) bought over the shopping list: the recipe it was for is a job of the Herstellfenster
