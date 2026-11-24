@@ -1,4 +1,4 @@
-local Bz = LibStub("DonCore-1.0"):NewModule("Blizz", 14)
+local Bz = LibStub("DonCore-1.0"):NewModule("Blizz", 15)
 if not Bz then return end
 
 ---------------------------------------------------------------------------
@@ -45,8 +45,13 @@ local K = setmetatable({}, { __index = Kit or {} })
 Bz.kit = K
 Bz.K = K -- (Profitdon's name for the kit)
 K.blizzLook = true -- a caller can tell the two kits apart
-Bz.VERSION = 14
+Bz.VERSION = 15
 Bz.ROW_H = 24 -- the row height of Bz.List without opts.rowHeight (Profitdon's craft and sell lists)
+-- (minor 15, 24.11.2026, Fenstercheck) a right-aligned table head keeps this much room to its column's right edge
+-- (Crafts "Skill" stood on the frame); K.Toggle draws a light edge round the game's check box (Geardon's options: the
+-- empty box was dark on dark) and knows SetDisabled; KitTip and the item tooltip of a row open below the mouse for a
+-- wide owner (Bz.TipAt, Kit.TIP_WIDE), so they no longer grow up over the search box and the help line above a list
+Bz.HEAD_RIGHT_GAP = 6
 if Bz.light == nil then Bz.light = true end
 
 local function Try(f, ...)
@@ -465,6 +470,30 @@ function K.Toggle(parent, opts)
   t.check = CreateFrame("CheckButton", nil, t, "UICheckButtonTemplate")
   t.check:SetSize(24, 24)
   t.check:SetPoint("LEFT", -2, 0)
+  -- (minor 15) a light edge on the box itself, so an empty box shows on the dark ground of a list or options page
+  t.edge = {}
+  if t.check.CreateTexture then
+    local IN, A = 4, 0.55
+    for i, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
+      local e = t.check:CreateTexture(nil, "OVERLAY")
+      if e.SetColorTexture then e:SetColorTexture(0.85, 0.74, 0.5, A) end
+      if side == "TOP" or side == "BOTTOM" then
+        e:SetPoint(side .. "LEFT", IN, side == "TOP" and -IN or IN) e:SetPoint(side .. "RIGHT", -IN, side == "TOP" and -IN or IN)
+        e:SetHeight(1)
+      else
+        e:SetPoint("TOP" .. side, side == "LEFT" and IN or -IN, -IN) e:SetPoint("BOTTOM" .. side, side == "LEFT" and IN or -IN, IN)
+        e:SetWidth(1)
+      end
+      t.edge[i] = e
+    end
+  end
+  function t:SetDisabled(off)
+    self._disabled = off and true or nil
+    if self.check.SetEnabled then self.check:SetEnabled(not off) end
+    for _, e in ipairs(self.edge) do if e.SetAlpha then e:SetAlpha(off and 0.4 or 1) end end
+    return self
+  end
+  function t:IsDisabled() return self._disabled == true end
   t.label = t:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   t.label:SetPoint("LEFT", t.check, "RIGHT", 0, 1)
   t.label:SetText(opts.label or "")
@@ -1509,7 +1538,8 @@ local function KitTip(owner, title, lines, hint, anchor)
   if not (tt and tt.SetOwner) or title == nil then return false end
   local sub
   if type(title) == "table" then title, sub = title.text or title[1], title.sub end
-  tt:SetOwner(owner, anchor or "ANCHOR_RIGHT")
+  -- (minor 15) a wide owner (a row): below right of the mouse (Kit.PlaceTip), a small one right of it
+  if anchor or not (Kit and Kit.PlaceTip) then tt:SetOwner(owner, anchor or "ANCHOR_RIGHT") else Kit.PlaceTip(tt, owner) end
   tt:SetText(tostring(title or ""), 1, 0.82, 0)
   if sub and sub ~= "" then tt:AddLine(tostring(sub), 0.7, 0.7, 0.7, true) end
   for _, l in ipairs(type(lines) == "table" and lines or {}) do
@@ -1534,7 +1564,7 @@ local function ShowTipOf(owner, it, tipFn)
   end
   if type(it) == "table" and type(it.tooltip) == "table" then KitTip(owner, it.tooltip[1], it.tooltip[2], it.tooltip[3]) return end
   if type(it) == "table" and it.itemID and GameTooltip and GameTooltip.SetItemByID then
-    GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+    if Kit and Kit.PlaceTip then Kit.PlaceTip(GameTooltip, owner) else GameTooltip:SetOwner(owner, "ANCHOR_RIGHT") end
     Bz.NoCompare(GameTooltip)
     SetItem(GameTooltip, it)
     for _, l in ipairs(type(it.tipLines) == "table" and it.tipLines or {}) do
@@ -2351,7 +2381,7 @@ function K.TableHead(parent, opts)
       b.text:ClearAllPoints()
       if def.justify == "RIGHT" then
         b.text:SetJustifyH("RIGHT")
-        b.text:SetPoint("RIGHT", b, "LEFT", x + cw - left, 0)
+        b.text:SetPoint("RIGHT", b, "LEFT", x + cw - left - Bz.HEAD_RIGHT_GAP, 0) -- (minor 15) off the frame
       else
         b.text:SetJustifyH("LEFT")
         b.text:SetPoint("LEFT", math.max(8, x - left), 0)

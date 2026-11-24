@@ -122,7 +122,7 @@ end)
 -- Categories
 ---------------------------------------------------------------------------
 -- Classic's item classes in the order of the game's auction window (Enum.ItemClass numbers)
-local ORDER = { 2, 4, 1, 0, 7, 6, 11, 9, 5, 3, 15, 12 }
+local ORDER = { 2, 4, 1, 0, 7, 6, 11, 9, 5, 15, 12 } -- (24.11.2026, Fenstercheck) without 3, "Jewelry(OBSOLETE)"
 local function ClassName(c)
   return ns.Call(C_Item and C_Item.GetItemClassInfo, c) or ns.Call(_G.GetItemClassInfo, c)
 end

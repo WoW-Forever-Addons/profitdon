@@ -1,5 +1,12 @@
 # Profitdon
 
+## 0.2.34
+- Optionen öffnen nur noch Profitdons eigenes Fenster; in den Spieloptionen unter AddOns steht nur ein Knopf dorthin. Fensterstil ist die gemeinsame Option der Don-Addons unter "Fenster".
+- Gegenstandsnamen laden von selbst nach, statt "Item 232438" in Skillen, Entzaubern und Händler.
+- Einkaufsliste: ein gekaufter Gegenstand einer eigenen Liste steht in einer Zeile mit "im AH" und Preis; die Summe ist eine eigene, lesbare Zeile (rot nur bei Goldmangel); lange Hinweise unten auf zwei Zeilen.
+- Auswertung: kürzere Namen in "Gewinn je Methode", nichts mehr am rechten Rand abgeschnitten.
+- Kaufen und Verkaufen ohne leere zweite Kopfzeile; "Jewelry(OBSOLETE)" nicht mehr in den Kategorien.
+
 ## 0.2.33
 - Blizzard-Look: die Kopfzeilen der Listen (Kategorien in Kaufen, Gruppen in den anderen Listen) sind jetzt die Leiste des Spiels, Plus und Minus stehen rechts.
 

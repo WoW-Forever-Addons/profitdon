@@ -626,8 +626,35 @@ local function Rows()
       local SRC = { vendor = "beim Händler (Knopf Mats kaufen)", ah = "im AH", craft = "selbst herstellen", stock = "in den Taschen", mail = "gekauft" }
       local sumAH, sumVendor, noPrice, wayN, firstHead = 0, 0, 0, 0, nil
       local favorCost, favorN = 0, 0
-      for _, e in ipairs(Cr.ShoppingList(entries, true)) do
-        if e.head then
+      local shop = Cr.ShoppingList(entries, true)
+      -- (Daniel 24.11.2026, Fenstercheck b6 67 s: "nicht noch einen zweiten da unter ... könnte dann direkt daneben stehen")
+      -- an item of an own list that is bought as it is (one row below its head, the item itself, not made): one row, the
+      -- purchase row with the head's count field, X and right click (it.listHead)
+      local mergedHead = {}
+      for i, e in ipairs(shop) do
+        local c, n = shop[i + 1], shop[i + 2]
+        if e.head and e.en and e.en.list and e.en.r and e.en.r.listItem and c and not c.head and not c.alt
+          and c.id == e.en.r.listItem and c.src ~= "craft" and (c.depth or 0) <= 1 and (not n or n.head) then
+          mergedHead[c] = e
+        end
+      end
+      local function ListSub(en)
+        local how = en.fixed and ("fest %d kaufen, Taschen zählen nicht"):format(en.runs) or ("Vorrat %d halten, Taschen abgezogen"):format(en.runs)
+        -- (Daniel 24.11.2026) the price alarm of the entry
+        if en.alarm then how = how .. ", " .. (en.alarmOn and GRN or "") .. ("Wecker ab %s%s"):format(M(en.alarm), en.alarmOn and " erreicht|r" or "") end
+        return how .. "  (Rechtsklick: ändern)"
+      end
+      local function ListRemove(en)
+        return function() ns.ShopLists.Remove(en.list, en.kind, en.key) ns.Refresh() end
+      end
+      local function ListHeadEntry(en)
+        return { head = true, planRow = true, char = en.char, spell = en.r.spell, prof = en.r.prof, id = en.r.item, runs = en.runs, r = en.r,
+          listId = en.list, listKind = en.kind, listKey = en.key, fixed = en.fixed }
+      end
+      for i, e in ipairs(shop) do
+        if e.head and shop[i + 1] and mergedHead[shop[i + 1]] == e then
+          -- drawn with its purchase row below
+        elseif e.head then
           local en = e.en
           local mode = en.chosen and v and v.mode or nil
           local known = Cr.IKnow(en.r.spell)
@@ -662,13 +689,7 @@ local function Rows()
           end
           if en.chosen and not known then sub = sub .. ", " .. YEL .. "Rezept nicht gelernt|r" end
           -- (Daniel 19.11.2026) an own list: a stock to hold or a fixed amount, per entry
-          if en.list then
-            local how = en.fixed and ("fest %d kaufen, Taschen zählen nicht"):format(en.runs) or ("Vorrat %d halten, Taschen abgezogen"):format(en.runs)
-            sub = (en.writ and (sub .. ", ") or "") .. how
-            -- (Daniel 24.11.2026) the price alarm of the entry
-            if en.alarm then sub = sub .. ", " .. (en.alarmOn and GRN or "") .. ("Wecker ab %s%s"):format(M(en.alarm), en.alarmOn and " erreicht|r" or "") end
-            sub = sub .. "  (Rechtsklick: ändern)"
-          end
+          if en.list then sub = (en.writ and (sub .. ", ") or "") .. ListSub(en) end
           -- (Daniel 09.11.2026) how many crafts still pay with the mats bought cheapest first
           local be = not en.list and Cr.Breakeven(en.r, mode) or nil
           local tip, at, held, warn, way
@@ -798,6 +819,16 @@ local function Rows()
             { indent = (e.depth or 0) * 14, sv = { need = e.need, unit = e.unit, cost = e.cost } })
           if optional then it.titleColor = C.quiet it.subColor = C.quiet it.cellColors = { unit = C.quiet } end
           it.active = B.entry and B.kind == "mats" and B.entry.id == e.id
+          local mh = mergedHead[e]
+          if mh then
+            local en = mh.en
+            it.listHead, it.indent = ListHeadEntry(en), 0
+            it.sub = sub .. ((e.need or 0) ~= en.runs and (", %d kaufen"):format(e.need or 0) or "") .. ", " .. ListSub(en)
+            it.removeTip, it.onRemove = "Von der Einkaufsliste nehmen", ListRemove(en)
+            local head = it.listHead
+            it.edit = { key = "need", value = en.runs, tip = en.fixed and "Wie viele jedes Mal kaufen" or "Wie viele vorrätig halten",
+              onCommit = function(_, n) ns.SetHeadRuns(head, n) ns.Refresh() end }
+          end
           out[#out + 1] = it
           if not e.alt and (e.need or 0) > 0 and e.src ~= "craft" then
             if not e.cost then noPrice = noPrice + 1
@@ -813,14 +844,25 @@ local function Rows()
       -- (Runde 2, 11.11.2026, Bild 122448: "Einkauf: AH 2g" stayed after everything was bought) nothing left to buy: the line
       -- says so and where the bought mats are; W.shopDone lets the bar go on to the recipe (Draw)
       local way = wayN > 0 and ("  ·  %d Posten im Briefkasten abholen"):format(wayN) or ""
+      -- (Daniel 24.11.2026, Fenstercheck b6 s0056: "Summenzeile dunkelrot und winzig") the sum is a row of its own in the
+      -- row's type: the total in the title and in the column Summe, the parts below; red only when the gold is short.
+      -- item.text keeps the whole line (sumLine: the tests and the bar read it)
       if total == 0 and noPrice == 0 then
-        out[#out + 1] = { kind = "note", color = C.green, text = ("Einkauf: nichts mehr zu kaufen%s  ·  dein Gold %s"):format(way, ns.Money(gold)) }
+        out[#out + 1] = { kind = "trow", sumLine = true, title = "Einkauf: nichts mehr zu kaufen", titleColor = C.green, markColor = C.green,
+          sub = ("dein Gold %s%s"):format(ns.Money(gold), way), cells = {},
+          text = ("Einkauf: nichts mehr zu kaufen%s  ·  dein Gold %s"):format(way, ns.Money(gold)) }
         W.shopDone = firstHead
       else
-        out[#out + 1] = { kind = "note", warn = short or nil, color = short and C.red or C.title,
+        local favorBit = favorN > 0 and ("  ·  je Gunst %s (%d Gunst)"):format(ns.Money(math.floor(favorCost / favorN + 0.5)), favorN) or ""
+        local missBit = short and ("  ·  es fehlen " .. ns.Money(total - gold)) or ""
+        local priceBit = noPrice > 0 and ("  ·  %d Mats ohne Preis"):format(noPrice) or ""
+        out[#out + 1] = { kind = "trow", sumLine = true, markColor = short and C.red or nil,
+          title = ("Einkauf gesamt %s%s"):format(ns.Money(total), short and ("   %sEs fehlen %s|r"):format(RED, ns.Money(total - gold)) or ""),
+          titleColor = C.title,
+          sub = ("AH %s  ·  Händler %s%s  ·  dein Gold %s%s%s"):format(ns.Money(sumAH), ns.Money(sumVendor), favorBit, ns.Money(gold), priceBit, way),
+          cells = { cost = ns.Money(total) },
           text = ("Einkauf: AH %s  ·  Händler %s  ·  gesamt %s%s  ·  dein Gold %s%s%s%s"):format(ns.Money(sumAH), ns.Money(sumVendor), ns.Money(total),
-            favorN > 0 and ("  ·  je Gunst %s (%d Gunst)"):format(ns.Money(math.floor(favorCost / favorN + 0.5)), favorN) or "", ns.Money(gold),
-            short and ("  ·  es fehlen " .. ns.Money(total - gold)) or "", noPrice > 0 and ("  ·  %d Mats ohne Preis"):format(noPrice) or "", way) }
+            favorBit, ns.Money(gold), missBit, priceBit, way) }
         W.shopDone = nil
       end
     end
@@ -1310,6 +1352,20 @@ local function Primary()
   end
 end
 
+-- (Fenstercheck 24.11.2026, Bild b6 s0056: the text of an own list ended in "Se...") a long text of the bar in two lines:
+-- split after a ". ", ": " or "; " where the longer of the two lines is shortest (the sub line below the title)
+function ns.BarText(text)
+  text = tostring(text or "")
+  if #text <= 130 then return text, nil end
+  local best, bestLen
+  for pos in text:gmatch("()[%.:;] ") do
+    local len = math.max(pos, #text - pos - 1)
+    if pos > 20 and (not best or len < bestLen) then best, bestLen = pos, len end
+  end
+  if not best then return text, nil end
+  return text:sub(1, best), (text:sub(best + 2):gsub("^%s+", ""))
+end
+
 local function FillBar()
   local B, Cr = ns.BuyState, ns.Crafts
   local id, sub
@@ -1389,7 +1445,8 @@ local function FillBar()
     end
   end
   if not id then
-    W.bar:SetData({ title = TABS[tab] and TABS[tab][2] or "", titleColor = C.muted })
+    local t, s2 = ns.BarText(TABS[tab] and TABS[tab][2] or "")
+    W.bar:SetData({ title = t, sub = s2, titleColor = C.muted })
     W.bar:SetActions({})
     return
   end
@@ -1478,7 +1535,9 @@ local function Place()
   -- (Daniel 15.11.2026, Bild Blizzard-Optik: "suchen oben nur wenn man fenster ganz groß zieht") Blizzard's buttons are
   -- wider than the kit's chips: there the lists stand in the first row beside the portrait and the controls (search,
   -- switches, Vollscan) in a second row of their own above the table
-  local two = W.blizz and true or false
+  -- (Fenstercheck 24.11.2026, Bilder b6 s0008, s0096: Kaufen and Verkaufen with an empty row on top) the pages of their own
+  -- have no chips: their controls (Vollscan) take the first row, the page starts right below it
+  local two = W.blizz and not (tab == "ah" or tab == "sell") and true or false
   local top = two and 64 or 36
   local cy = two and -39 or -6
   W.listPage:SetSize(w, h)
@@ -1612,6 +1671,7 @@ Draw = function()
   end
   if W.rep then W.rep:Hide() end
   W.listPage:Show()
+  local miss0 = ns.infoMiss
   W.items = Sort(Signals(Rows()))
   -- (Runde 2, 11.11.2026) everything of the shopping list is there or bought: once the purchase signal of the chosen mat
   -- has gone, the bar goes on to the recipe ("Alle herstellen"), once per finished list
@@ -1642,6 +1702,7 @@ Draw = function()
   if tab == "sell" and W.sellPage then W.sellPage.w, W.sellPage.h = W.bw or 700, W.bh or 400 W.sellPage:Fill() end
   if tab == "ah" and W.ahPage then W.ahPage.w, W.ahPage.h = W.bw or 700, W.bh or 400 W.ahPage:Fill() end
   Place()
+  ns.NameRetry(ns.infoMiss ~= miss0)
 end
 
 ns.NameFn(Draw, "Window.lua Draw")
@@ -1711,6 +1772,7 @@ local function OnRowClick(it, button)
   local e = it.entry
   if button == "RightButton" then
     if e and e.head and e.listId then ns.ListEntryMenu(e) return end
+    if it.listHead then ns.ListEntryMenu(it.listHead) return end
     local kind, key = ns.ListTarget(it)
     if kind then ns.ListAddMenu(kind, key, it.title, ns.FindItems(it)) end
     return
@@ -2029,11 +2091,28 @@ ns.On("BAG_UPDATE_DELAYED", function() if W and W:IsShown() and (tab == "debag" 
 -- (24.11.2026, Ruckler, DonMonitor Riverglades: eight hitches of 27 to 66 ms in a minute with the window open) item data
 -- of any addon redrew the whole tab: only when an item was missing since the last look (Core.lua ns.infoMiss)
 local missSeen
-ns.On("GET_ITEM_INFO_RECEIVED", function()
+local function ItemDataCame()
   if not (W and W:IsShown()) or missSeen == ns.infoMiss then return end
   missSeen = ns.infoMiss
   ns.RefreshSoon()
-end)
+end
+ns.On("GET_ITEM_INFO_RECEIVED", ItemDataCame)
+-- (Fenstercheck 24.11.2026, Bilder b6 s0046, s0080, s0088: "Item 232438", "Item 3775" in Skillen, Entzaubern, Händler
+-- until the next click) the game loads an item it keeps in its own cache without GET_ITEM_INFO_RECEIVED, only with
+-- ITEM_DATA_LOAD_RESULT (the answer to C_Item.RequestLoadItemDataByID, Core.lua ns.ItemInfo; Questdon waits for both)
+ns.On("ITEM_DATA_LOAD_RESULT", ItemDataCame)
+-- and when neither comes (Forever does not answer for some items, DonCore Kit.ItemWait): a drawing that still missed a
+-- name looks again 2 s later, at most 4 times in a row; a drawing with every name stops it
+local nameTries, nameArmed = 0, false
+function ns.NameRetry(missed)
+  if not missed then nameTries = 0 return end
+  if nameArmed or nameTries >= 4 then return end
+  nameTries, nameArmed = nameTries + 1, true
+  ns.After(2, function()
+    nameArmed = false
+    if W and W:IsShown() then missSeen = nil ns.RefreshSoon() end
+  end)
+end
 ns.OnInit(function()
   local ui = ns.db.ui
   if type(ui) == "table" and ui.craft then tab = ui.craft end
@@ -2116,17 +2195,22 @@ local OPTS = {
   { "medDays", "Median und Tendenz über so viele Tage", { 3, 5, 7 }, nil, "Preise und Anzeige" },
   { "scanBudget", "Vollscan: Rechenzeit je Bild in ms (kleiner läuft ruhiger, dauert länger)", { 2, 4, 8 }, nil, "Preise und Anzeige" },
   { "tooltip", "Preise im Item-Tooltip (Shift: Einzelheiten)", nil, nil, "Preise und Anzeige" },
-  -- (Daniel 20.11.2026: the look as a choice of two named looks in all Don addons) stored as true/false as before
-  { "blizzLook", "Fensterstil", { { false, "Don-Look" }, { true, "Blizzard-Look" } }, nil, "Preise und Anzeige", nil,
-    "Don-Look oder Blizzard-Look für Profitdons Fenster. Wirkt nach /reload." },
+  -- (24.11.2026, Fenstercheck) the look (blizzLook) is no longer here: DonCore's shared item ns.LookOption under the
+  -- heading "Fenster" (below), the same name as in all Don addons, value db.opt.blizzLook as before
   { "afkCap", "Herstellen höchstens 28 Minuten je Klick (sonst loggt das Spiel nach 30 Minuten ohne Eingabe aus)", nil, nil, "Preise und Anzeige" },
   { "hideRecipeList", "Blizzards Liste verfolgter Rezepte ausblenden (sie stehen auf der Einkaufsliste)", nil, nil, "Preise und Anzeige" },
 }
 ns.WINDOW_OPTS = OPTS -- (tests)
 -- a choice with named entries: the steps are { value, text } pairs
 local function Named(o) return type(o[3]) == "table" and type(o[3][1]) == "table" end
-function ns.OptLabel(key) for _, o in ipairs(OPTS) do if o[1] == key then return o[2] end end return key end
-local Opt = Core:Get("Options", 1)
+-- the shared words of the look option (DonCore Settings 6: "Window style", in the game's language)
+local SW = Core:Get("Settings", 6)
+function ns.OptLabel(key)
+  for _, o in ipairs(OPTS) do if o[1] == key then return o[2] end end
+  if key == "blizzLook" and SW then return SW.LookWord("Window style") end
+  return key
+end
+local Opt = Core:Get("Options", 8)
 if Opt then
   local function Step(o, v)
     if o[4] == "money" then return ns.Money(v) end
@@ -2164,6 +2248,12 @@ if Opt then
     main[#main + 1] = o[1]
   end end
   ns.WINDOW_OPT_MAIN = main -- (tests)
+  -- (24.11.2026, Fenstercheck) the heading "Fenster" with the shared look option and the minimap button
+  main[#main + 1] = "header:Fenster"
+  if ns.LookOption then
+    items[#items + 1] = ns.LookOption({ addon = "Profitdon", note = "Wirkt nach /reload." })
+    main[#main + 1] = "blizzLook"
+  end
   if ns.MinimapOption then
     items[#items + 1] = ns.MinimapOption({ name = "Minimap-Knopf zeigen", tip = "Profitdons Knopf am Rand der Minimap." })
     main[#main + 1] = "minimapButton"
@@ -2179,89 +2269,24 @@ if Opt then
   })
 end
 ---------------------------------------------------------------------------
--- (Daniel 15.11.2026: "1 zu 1 wie Blizzards Fenster (Berufsfenster, Optionen)") the same options in the game's own
--- options window (Esc > Optionen > AddOns > Profitdon), built with the game's Settings functions: a check box per
--- switch, a dropdown per value list or choice, a heading per group. The Settings addon is not in data/wowui (only its calls are),
--- so every function is asked for first and the whole registration runs protected; without it, or with the
--- Fensterstil "Don-Look" (blizzLook false), /profit optionen opens DonCore's window as before. Values live in ProfitdonDB.opt as ever.
+-- (24.11.2026, Fenstercheck, Daniel: "Bei den Optionen immer nur das Optionsfenster des jeweiligen Addons aufmachen")
+-- Profitdon's own full pages in the game's options window (15.11.2026, BlizzOptions) are gone: the options live in
+-- DonCore's window only (the look follows Fensterstil), Blizzard's AddOns list keeps DonCore's short page with the button
+-- that opens it (Settings 7, BuildSettings with ownWindow). Values live in ProfitdonDB.opt as ever.
 ---------------------------------------------------------------------------
-local function OptStep(o, v)
-  if o[4] == "money" then return ns.Money(v) end
-  if o[4] == "pct" then return v .. " %" end
-  if o[4] == "h" then return v .. " h" end
-  if o[4] == "min" then return v .. " min" end
-  if o[4] == "dur" then return (ns.POST_HOURS[v] or "?") .. " h" end
-  return tostring(v)
+local SETTINGS_WORDS = { Options = "Optionen", Open = "Öffnen" }
+local function BlizzPage()
+  if not ns.BuildSettings then return nil end
+  local ok, cat = pcall(ns.BuildSettings, { name = "Profitdon", ownWindow = true, pages = {},
+    T = function(s) return SETTINGS_WORDS[s] or s end })
+  if not ok then ns.Fact("blizzOptions", "Fehler: " .. tostring(cat)) return nil end
+  return cat
 end
-local SETTINGS_FUNCS = { "RegisterVerticalLayoutCategory", "RegisterAddOnCategory", "RegisterProxySetting", "CreateCheckbox", "CreateDropdown",
-  "CreateControlTextContainer", "OpenToCategory" }
-local blizzCat
-local function BlizzOptions()
-  local S = rawget(_G, "Settings")
-  if type(S) ~= "table" or type(S.VarType) ~= "table" then return nil, "Settings" end
-  for _, f in ipairs(SETTINGS_FUNCS) do if type(S[f]) ~= "function" then return nil, "Settings." .. f end end
-  local category, layout = S.RegisterVerticalLayoutCategory("Profitdon")
-  local head
-  for _, o in ipairs(OPTS) do if not o[6] then
-    local key = o[1]
-    if o[5] and o[5] ~= head then
-      head = o[5]
-      local mk = rawget(_G, "CreateSettingsListSectionHeaderInitializer")
-      if layout and layout.AddInitializer and type(mk) == "function" then layout:AddInitializer(mk(head)) end
-    end
-    local function get() return ns.Opt(key) end
-    local function set(v)
-      if ns.db.opt[key] == v then return end
-      ns.db.opt[key] = v
-      ns.OptionChanged()
-    end
-    if Named(o) then
-      -- the entries' values say the type: true/false (Fensterstil) or numbers; a value not stored yet reads as the default
-      local bool = type(o[3][1][1]) == "boolean"
-      local setting = S.RegisterProxySetting(category, "Profitdon_" .. key, bool and S.VarType.Boolean or S.VarType.Number, o[2], ns.DEFAULTS[key],
-        function() local v = get() if v == nil then v = ns.DEFAULTS[key] end return v end, set)
-      S.CreateDropdown(category, setting, function()
-        local c = S.CreateControlTextContainer()
-        for _, p in ipairs(o[3]) do c:Add(p[1], p[2]) end
-        return c:GetData()
-      end, o[7] or o[2])
-    elseif o[3] then
-      local setting = S.RegisterProxySetting(category, "Profitdon_" .. key, S.VarType.Number, o[2], ns.DEFAULTS[key], get, set)
-      S.CreateDropdown(category, setting, function()
-        local c = S.CreateControlTextContainer()
-        local cur, seen = ns.Opt(key), false
-        local list = {}
-        for _, v in ipairs(o[3]) do list[#list + 1] = v if v == cur then seen = true end end
-        if type(cur) == "number" and not seen then list[#list + 1] = cur table.sort(list) end
-        for _, v in ipairs(list) do c:Add(v, OptStep(o, v)) end
-        return c:GetData()
-      end, o[2])
-    else
-      local setting = S.RegisterProxySetting(category, "Profitdon_" .. key, S.VarType.Boolean, o[2], ns.DEFAULTS[key] and true or false,
-        function() return get() and true or false end, set)
-      S.CreateCheckbox(category, setting, o[2])
-    end
-  end end
-  local mm = S.RegisterProxySetting(category, "Profitdon_minimapButton", S.VarType.Boolean, "Minimap-Knopf zeigen", true,
-    function() return ns.Opt("minimapButton") ~= false end,
-    function(v) ns.db.opt.minimapButton = v and true or false if ns.RefreshMinimapButton then ns.RefreshMinimapButton() end end)
-  S.CreateCheckbox(category, mm, "Profitdons Knopf am Rand der Minimap.")
-  S.RegisterAddOnCategory(category)
-  return category
-end
-ns.BlizzOptions = BlizzOptions -- (tests)
-ns.OnInit(function()
-  if ns.Opt("blizzLook") == false then return end
-  local ok, cat, miss = pcall(BlizzOptions)
-  if ok and cat then blizzCat = cat end
-  ns.Fact("blizzOptions", ok and (cat and "an" or ("fehlt: " .. tostring(miss))) or ("Fehler: " .. tostring(cat)))
-end)
-function ns.OpenOptions()
-  if blizzCat and ns.Opt("blizzLook") ~= false then
-    local id = type(blizzCat.GetID) == "function" and blizzCat:GetID() or blizzCat
-    if pcall(Settings.OpenToCategory, id) then return true end
-  end
-  if Opt then Opt.Open("Profitdon") return true end
+ns.BlizzPage = BlizzPage -- (tests)
+ns.OnInit(BlizzPage)
+-- tab: optional tab key of the window ("main")
+function ns.OpenOptions(tab)
+  if Opt and Opt.Open("Profitdon", tab) then return true end
 end
 -- (08.11.2026) the lists in slices (Scan.lua ComputeLater), not 268000 auctions in one frame
 function ns.OptionChanged()
@@ -2287,7 +2312,7 @@ function ns.SyncListTabs()
     local k = ListKey(l.id)
     local who = ns.ShopLists.OwnerName(l)
     LISTKEY[k], GROUP_OF[k], KIND[k] = l.id, "shop", "mats"
-    TABS[k] = { who and ("%s (%s)"):format(l.name, who) or l.name, (who and ("Liste von " .. who .. ". Rechtsklick: auf diesen Char kopieren oder verschieben. ") or "") .. ("Eigene Liste \"%s\": Vorrat halten (Taschen abgezogen) oder feste Menge, je Eintrag. Selbst herstellbares (auch von einem anderen Char) mit Mats, wenn billiger. AH-Zeile anklicken: Kauf je Klick."):format(l.name) }
+    TABS[k] = { who and ("%s (%s)"):format(l.name, who) or l.name, (who and ("Liste von " .. who .. " (Rechtsklick: auf diesen Char kopieren oder verschieben). ") or "") .. "Je Eintrag Vorrat halten (Taschen abgezogen) oder feste Menge. Herstellbares (auch von einem anderen Char) mit Mats, wenn billiger. AH-Zeile anklicken: Kauf je Klick." }
     subs[#subs + 1] = k
   end
   SUBS.shop = subs

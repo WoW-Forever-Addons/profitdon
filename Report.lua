@@ -21,12 +21,14 @@ local _, ns = ...
 local R = {}
 ns.Report = R
 
+-- (Fenstercheck 24.11.2026, Bild b6 s0100: "Reparatur, Lehrer, R..." in Gewinn je Methode, the bars' names have 110 px)
+-- a third field: the short name of the bar, the full one heads its tooltip
 R.METHODS = {
-  { "flip", "AH unter Händlerpreis" }, { "craft", "Herstellen" }, { "de", "Entzaubern" },
+  { "flip", "AH unter Händlerpreis", "Unter Händlerpreis" }, { "craft", "Herstellen" }, { "de", "Entzaubern" },
   { "ah", "Andere AH-Verkäufe" }, { "grey", "Graues beim Händler" }, { "fee", "Einstellgebühr netto" },
-  { "favor", "Merchant's-Favor-Kisten" },
+  { "favor", "Merchant's-Favor-Kisten", "Favor-Kisten" },
   -- (Daniel 08.11.2026: every way in and out, Ledger.lua) purchases by hand that fit no method, and what is no trading
-  { "ahbuy", "AH-Käufe sonstige" }, { "loot", "Beute und Quests" }, { "upkeep", "Reparatur, Lehrer, Reisen" },
+  { "ahbuy", "AH-Käufe sonstige" }, { "loot", "Beute und Quests" }, { "upkeep", "Reparatur, Lehrer, Reisen", "Unterhalt" },
   { "mail", "Post und Handel" },
 }
 local NAME = {}
@@ -555,7 +557,8 @@ function R.Page(parent, redraw, kit)
     local bagAH, postAH = R.BagValue(nil, true), R.PostedValue(nil, true)
     self.tiles[2]:SetData("Ware", M(sum.goods - posted), bagAH > sum.goods - posted and ("Händlerpreis, im AH etwa " .. M(bagAH)) or "in den Taschen, Händlerpreis")
     self.tiles[3]:SetData("Eingestellt", M(posted), postAH > posted and ("Händlerpreis, im AH nach Gebühr " .. M(postAH)) or "im AH, Händlerpreis")
-    self.tiles[4]:SetData("Heute", sum.today and MS(sum.today) or "-", "Gold und Ware seit dem ersten Wert heute")
+    -- (Fenstercheck 24.11.2026, Bild b6 s0100: "seit dem ersten Wert he...") short enough for the tile
+    self.tiles[4]:SetData("Heute", sum.today and MS(sum.today) or "-", "Zuwachs an Gold und Ware heute")
     local pts = R.Curve(RANGES[self.range][2])
     local wealth, gold = {}, {}
     for _, c in ipairs(pts) do wealth[#wealth + 1] = { c[1], c[2] + c[3] } gold[#gold + 1] = { c[1], c[2] } end
@@ -568,7 +571,7 @@ function R.Page(parent, redraw, kit)
       local e = meth[m[1]]
       if e then
         local net = e[2] - e[1]
-        entries[#entries + 1] = { key = m[1], text = m[2], value = math.abs(net), color = net < 0 and C.red or C.gold,
+        entries[#entries + 1] = { key = m[1], text = m[3] or m[2], value = math.abs(net), color = net < 0 and C.red or C.gold,
           right = Kit.Money(net, { sign = true, short = true }),
           tooltip = { m[2], { { "Ausgaben", ns.Money(e[1]) }, { "Einnahmen", ns.Money(e[2]) }, { "Gewinn", ns.Money(net) },
             { "ROI", e[1] > 0 and (ns.Deals.ROI(net, e[1]) .. " %") or "-" } } } }
@@ -619,7 +622,9 @@ function R.Page(parent, redraw, kit)
     end
     y = y + math.ceil(#self.tiles / per) * (64 + S.gap)
     local methH = S.sub + 2 + max(1, #(self.bars.entries or {})) * 22 + S.gap
-    if cw >= 760 then
+    -- (Fenstercheck 24.11.2026, Bild b6 s0100: "Gesamt" at the right edge) side by side only where the box of the methods
+    -- has room for its title and the three buttons
+    if cw >= 860 then
       local lw = floor((cw - S.gap) * 0.58)
       local hh = max(200, methH)
       put(self.chartBox, x, y, lw, hh)

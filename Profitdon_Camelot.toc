@@ -3,7 +3,7 @@
 ## Notes: Lean gold helper for WoW Forever: craft for the vendor, disenchant for mats, auctions below the vendor price, sell mats at the cheapest offer.
 ## Notes-deDE: Schlanker Goldhelfer für WoW Forever: Herstellen für den Händler, Entzaubern, Auktionen unter Händlerpreis, Mats zum billigsten Angebot verkaufen.
 ## Author: DonCoohd
-## Version: 0.2.33
+## Version: 0.2.34
 ## IconTexture: Interface\AddOns\Profitdon\Media\minimap
 ## SavedVariables: ProfitdonDB
 ## X-Curse-Project-ID: 1818383
@@ -12,6 +12,7 @@
 Libs\LibStub\LibStub.lua
 Libs\DonCore\DonCore.lua
 Libs\DonCore\Style.lua
+Libs\DonCore\Settings.lua
 Libs\DonCore\MinimapButton.lua
 Libs\DonCore\Kit.lua
 Libs\DonCore\Options.lua

@@ -1,5 +1,9 @@
 local ADDON, ns = ...
 ns.Style = LibStub("DonCore-1.0"):Get("Style", 3) -- shared kit from DonCore (Libs\DonCore\Style.lua)
+-- (24.11.2026, Fenstercheck) DonCore's Settings (Libs\DonCore\Settings.lua): the short page in Blizzard's AddOns list
+-- (ns.BuildSettings with ownWindow, Window.lua) and the shared look option (ns.LookOption)
+local addonName = ADDON
+LibStub("DonCore-1.0"):Get("Settings", 1):Attach(addonName, ns)
 
 ---------------------------------------------------------------------------
 -- Profitdon (Daniel 06.11.2026: "ein lightweight addon, das sich genau auf die sachen konzentriert, die er macht",
