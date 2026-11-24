@@ -493,6 +493,7 @@ local function KeepBook(id)
   ns.liveBook[id] = { t = time(), rows = rows, full = full and true or false }
   if rows[1] then ns.fresh[id] = { p = rows[1].unitPrice, t = time() } ns.SellDirty() end
   ns.liveVer = (ns.liveVer or 0) + 1
+  if ns.ShopLists then ns.ShopLists.Alarm(id, rows[1] and rows[1].unitPrice or nil) end -- (24.11.2026) price alarms
 end
 
 local L = { queue = {}, busy = nil }

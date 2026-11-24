@@ -77,6 +77,63 @@ function SL.SetFixed(id, kind, key, fixed)
   if e then e.fixed = fixed and true or nil return true end
 end
 
+-- (Daniel 24.11.2026: "für die Gegenstände einen Preiswecker stellen ... der mich im Chat drauf aufmerksam macht, wenn
+-- der erreicht ist") a price alarm per item entry: e.alarm = copper per piece. Prices are only seen at the auction
+-- house: a full scan, a profession scan (Prices.lua SaveScan, SaveItem) and every commodity search (Buy.lua KeepBook)
+-- call in here. e.alarmOn: the alarm has spoken; it speaks again once the price was above the mark (or nothing on offer).
+function SL.SetAlarm(id, kind, key, copper)
+  local e = SL.Find(id, kind, key)
+  if not (e and e.item) then return nil end
+  copper = tonumber(copper)
+  e.alarm = copper and copper >= 1 and math.floor(copper) or nil
+  e.alarmOn = nil
+  return true
+end
+local function ItemLink(id)
+  local GI = (C_Item and C_Item.GetItemInfo) or rawget(_G, "GetItemInfo")
+  local name, link = ns.Call(GI, id)
+  return (type(link) == "string" and link) or (type(name) == "string" and name) or ns.ItemInfo(id) or ("Item " .. id)
+end
+local function Money(c)
+  local ok, Kit = pcall(function() return LibStub("DonCore-1.0"):Get("Kit", 23) end)
+  return ok and Kit and Kit.Money and Kit.Money(c, { letters = true }) or (tostring(c) .. "c")
+end
+-- the price of an item was read (nil: nothing on offer): every alarm on it
+function SL.Alarm(item, price)
+  local hit = 0
+  for _, l in ipairs(Store()) do
+    for _, e in ipairs(l.items or {}) do
+      if e.item == item and e.alarm then
+        if price and price <= e.alarm then
+          if not e.alarmOn then
+            e.alarmOn = true
+            hit = hit + 1
+            ns.Print(("|cffffd100Preiswecker:|r %s ab %s im AH (Wecker %s, Liste \"%s\")."):format(ItemLink(item), Money(price), Money(e.alarm), tostring(l.name)))
+          end
+        else
+          e.alarmOn = nil
+        end
+      end
+    end
+  end
+  return hit
+end
+-- after a scan (item nil: all) or one item's search: the alarms against the saved rows of that auction house
+function SL.CheckAlarms(key, item)
+  local P = ns.Prices
+  local seen, hit = {}, 0
+  for _, l in ipairs(Store()) do
+    for _, e in ipairs(l.items or {}) do
+      local id = e.item
+      if id and e.alarm and not seen[id] and (not item or item == id) then
+        seen[id] = true
+        hit = hit + SL.Alarm(id, P.Row(key, id) and P.Low(id, key) or nil)
+      end
+    end
+  end
+  return hit
+end
+
 -- the recipe of an item entry: the item is its own reagent, so Crafts.ShoppingList buys it or makes it, whichever is cheaper
 function SL.ItemRecipe(lid, item)
   return { spell = ("list:%d:i%d"):format(lid, item), item = item, reag = { { item, 1 } }, count = 1, listItem = item }
@@ -100,7 +157,7 @@ function SL.Entries(id)
       r, kind, key = SL.ItemRecipe(id, e.item), "item", e.item
     end
     if r then
-      out[#out + 1] = { r = r, runs = math.max(1, e.n or 1), list = id, kind = kind, key = key, fixed = e.fixed or nil, anyChar = true,
+      out[#out + 1] = { r = r, runs = math.max(1, e.n or 1), list = id, kind = kind, key = key, fixed = e.fixed or nil, anyChar = true, alarm = e.alarm, alarmOn = e.alarmOn,
         writ = kind == "writ" and key or nil }
     end
   end

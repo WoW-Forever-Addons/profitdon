@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.30
+- Einkaufsliste: Preiswecker je Gegenstand einer eigenen Liste (Rechtsklick auf den Eintrag, "Preiswecker stellen ..."). Sieht Profitdon den Gegenstand im AH zu diesem Preis oder billiger (Vollscan, Berufsscan, "Live prüfen" und jede Suche der Liste), steht eine Zeile im Chat. Die Zeile der Liste zeigt den Wecker, grün wenn erreicht. Gemeldet wird einmal, erneut erst, wenn der Preis zwischendurch darüber lag.
+
 ## 0.2.29
 - Kaufen: Rechtsklick auf ein Ergebnis setzt den Gegenstand auf eine eigene Einkaufsliste (oder eine neue), wie in den anderen Reitern.
 

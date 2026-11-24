@@ -334,6 +334,7 @@ function P.SaveItem(key, id, v)
   P.ver = P.ver + 1
   -- (Daniel 20.11.2026) the day's price history (History.lua)
   if v and ns.History then ns.History.Add(key, id, v[6] or v[1]) end
+  if ns.ShopLists then ns.ShopLists.CheckAlarms(key, id) end -- (24.11.2026) price alarms of the own lists
 end
 -- when the item's row was read: by a search of its own (Berufsscan), else the scan
 function P.RowTime(id, key)
@@ -359,6 +360,7 @@ function P.SaveScan(key, agg, count, pause)
   P.Invalidate()
   -- (Daniel 20.11.2026: median of the last days and the trend) each scan is a reading of the day (History.lua)
   if ns.History then ns.History.AddScan(key, agg, pause) end
+  if ns.ShopLists then ns.ShopLists.CheckAlarms(key) end -- (24.11.2026) price alarms of the own lists
 end
 
 ---------------------------------------------------------------------------

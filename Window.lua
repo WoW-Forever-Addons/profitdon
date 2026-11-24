@@ -660,7 +660,10 @@ local function Rows()
           -- (Daniel 19.11.2026) an own list: a stock to hold or a fixed amount, per entry
           if en.list then
             local how = en.fixed and ("fest %d kaufen, Taschen zählen nicht"):format(en.runs) or ("Vorrat %d halten, Taschen abgezogen"):format(en.runs)
-            sub = (en.writ and (sub .. ", ") or "") .. how .. "  (Rechtsklick: ändern)"
+            sub = (en.writ and (sub .. ", ") or "") .. how
+            -- (Daniel 24.11.2026) the price alarm of the entry
+            if en.alarm then sub = sub .. ", " .. (en.alarmOn and GRN or "") .. ("Wecker ab %s%s"):format(M(en.alarm), en.alarmOn and " erreicht|r" or "") end
+            sub = sub .. "  (Rechtsklick: ändern)"
           end
           -- (Daniel 09.11.2026) how many crafts still pay with the mats bought cheapest first
           local be = not en.list and Cr.Breakeven(en.r, mode) or nil
@@ -2357,11 +2360,54 @@ end
 function ns.ListEntryMenu(e)
   local SL = ns.ShopLists
   local id, kind, key = e.listId, e.listKind, e.listKey
-  ShowMenu(ItemName(e.id) or "Eintrag", {
+  local items = {
     { text = (e.fixed and "  " or "• ") .. "Vorrat halten (Taschen abgezogen)", onClick = function() SL.SetFixed(id, kind, key, false) ns.Refresh() end },
     { text = (e.fixed and "• " or "  ") .. "Feste Menge jedes Mal kaufen", onClick = function() SL.SetFixed(id, kind, key, true) ns.Refresh() end },
-    { text = "Von der Liste nehmen", onClick = function() SL.Remove(id, kind, key) ns.Refresh() end },
-  })
+  }
+  -- (Daniel 24.11.2026) a price alarm per item: a line in the chat once the AH offers it at that price or below
+  if kind == "item" then
+    local le = SL.Find(id, kind, key)
+    local alarm = le and le.alarm
+    items[#items + 1] = { text = alarm and ("Preiswecker ändern (%s) ..."):format(M(alarm)) or "Preiswecker stellen ...", onClick = function()
+      ns.AskMoney("Preiswecker: " .. (ItemName(key) or ""), alarm or (ns.Prices.Row(nil, key) and ns.Prices.Low(key)) or nil, function(c)
+        SL.SetAlarm(id, kind, key, c)
+        -- what is known now counts at once
+        if c then SL.CheckAlarms(nil, key) end
+        ns.Refresh()
+      end)
+    end }
+    if alarm then items[#items + 1] = { text = "Preiswecker aus", onClick = function() SL.SetAlarm(id, kind, key, nil) ns.Refresh() end } end
+  end
+  items[#items + 1] = { text = "Von der Liste nehmen", onClick = function() SL.Remove(id, kind, key) ns.Refresh() end }
+  ShowMenu(ItemName(e.id) or "Eintrag", items)
+end
+
+-- a small dialog for a price per piece ("12g 50s" or "12,5"); empty: onOk(nil)
+local moneyDlg
+function ns.AskMoney(title, value, onOk)
+  if moneyDlg and moneyDlg.ui ~= UI then moneyDlg:Hide() moneyDlg = nil end
+  if not moneyDlg then
+    moneyDlg = UI.Dialog(UI == Kit and "ProfitdonMoney" or "ProfitdonMoneyB", { title = title, width = 340, height = 170 })
+    moneyDlg.ui = UI
+    moneyDlg.text = UI.Text(moneyDlg.body, "sub", C.body)
+    moneyDlg.text:SetPoint("TOPLEFT", moneyDlg.body, "TOPLEFT", 0, -4)
+    moneyDlg.text:SetText("Preis je Stück, z. B. 12g 50s oder 12,5. Meldung im Chat,\nsobald das AH es so billig oder billiger anbietet.")
+    moneyDlg.edit = UI.MoneyBox(moneyDlg.body, { placeholder = "Preis je Stück", onEnter = function() moneyDlg.ok() end })
+    moneyDlg.edit:SetPoint("TOPLEFT", moneyDlg.body, "TOPLEFT", 0, -44)
+    moneyDlg.edit:SetSize(300, 26)
+    moneyDlg.ok = function()
+      local c = moneyDlg.edit:GetValue()
+      moneyDlg:Hide()
+      if moneyDlg.onOk then ns.Try(moneyDlg.onOk, c and c >= 1 and c or nil) end
+    end
+    moneyDlg:SetButtons({ { text = "Abbrechen", onClick = function(d) d:Hide() end }, { text = "OK", kind = "primary", onClick = function() moneyDlg.ok() end } })
+  end
+  moneyDlg.onOk = onOk
+  moneyDlg:SetTitle(title)
+  moneyDlg.edit:SetValue(value)
+  moneyDlg:Show()
+  if moneyDlg.edit.SetFocus then moneyDlg.edit:SetFocus() end
+  return moneyDlg
 end
 
 -- right click on a list chip (or its button): rename, delete
