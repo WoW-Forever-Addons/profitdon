@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.36
+- Einkaufsliste: der Rechtsklick auf einen Eintrag einer eigenen Liste beginnt wieder mit "Im AH suchen" (fehlte, seit Gegenstand und Kaufzeile eine Zeile sind).
+
 ## 0.2.35
 - Tooltip: die Zeilen, die Profitdon in Item-Tooltips schreibt (AH, Median, Entzaubern, Händler, Shift-Details), erscheinen im englischen Client auf Englisch, im deutschen auf Deutsch. Der Rest von Profitdon bleibt deutsch.
 

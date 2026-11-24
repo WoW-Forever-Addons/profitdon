@@ -1771,8 +1771,9 @@ local function OnRowClick(it, button)
   if not it or it.kind ~= "trow" then return end
   local e = it.entry
   if button == "RightButton" then
-    if e and e.head and e.listId then ns.ListEntryMenu(e) return end
-    if it.listHead then ns.ListEntryMenu(it.listHead) return end
+    -- (Daniel 24.11.2026: "rechtsklick im ah ansehen geht nicht mehr") the entry's menu begins with the AH search again
+    if e and e.head and e.listId then ns.ListEntryMenu(e, ns.FindItems(it)) return end
+    if it.listHead then ns.ListEntryMenu(it.listHead, ns.FindItems(it)) return end
     local kind, key = ns.ListTarget(it)
     if kind then ns.ListAddMenu(kind, key, it.title, ns.FindItems(it)) end
     return
@@ -2417,13 +2418,13 @@ function ns.ListAddItems(kind, key)
 end
 
 -- right click on an entry of an own list: stock or fixed, remove
-function ns.ListEntryMenu(e)
+function ns.ListEntryMenu(e, first)
   local SL = ns.ShopLists
   local id, kind, key = e.listId, e.listKind, e.listKey
-  local items = {
-    { text = (e.fixed and "  " or "• ") .. "Vorrat halten (Taschen abgezogen)", onClick = function() SL.SetFixed(id, kind, key, false) ns.Refresh() end },
-    { text = (e.fixed and "• " or "  ") .. "Feste Menge jedes Mal kaufen", onClick = function() SL.SetFixed(id, kind, key, true) ns.Refresh() end },
-  }
+  local items = {}
+  for _, x in ipairs(first or {}) do items[#items + 1] = x end
+  items[#items + 1] = { text = (e.fixed and "  " or "• ") .. "Vorrat halten (Taschen abgezogen)", onClick = function() SL.SetFixed(id, kind, key, false) ns.Refresh() end }
+  items[#items + 1] = { text = (e.fixed and "• " or "  ") .. "Feste Menge jedes Mal kaufen", onClick = function() SL.SetFixed(id, kind, key, true) ns.Refresh() end }
   -- (Daniel 24.11.2026) a price alarm per item: a line in the chat once the AH offers it at that price or below
   if kind == "item" then
     local le = SL.Find(id, kind, key)
