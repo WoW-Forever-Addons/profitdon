@@ -1389,7 +1389,7 @@ local function FillBar()
     end
   end
   if not id then
-    W.bar:SetData({ title = TABS[tab][2], titleColor = C.muted })
+    W.bar:SetData({ title = TABS[tab] and TABS[tab][2] or "", titleColor = C.muted })
     W.bar:SetActions({})
     return
   end
@@ -1943,6 +1943,13 @@ local function BuildWith()
     local l = ns.ShopLists.New(name)
     if l then ns.SyncListTabs() ns.SetTab(ListKey(l.id)) end
   end) end })
+  -- (Daniel 24.11.2026) the lists of the other characters of the account too, or only the own ones
+  W.allLists = W.chips:Add("slall", "Nur meine Listen", nil, { add = true, onClick = function()
+    ns.ShopLists.SetShowAll(not ns.ShopLists.ShowAll())
+    ns.SyncListTabs()
+    ns.Refresh()
+  end })
+  GROUP_OF.slall = "shop"
   W.newList:SetTooltip("Neue Liste", { "Eine eigene Einkaufsliste mit Namen (Writ-Route, Barfood ...).", "Einträge: Rechtsklick auf einen Gegenstand oder Writ in einem Reiter, \"Auf Liste\"." })
   GROUP_OF.slnew = "shop"
   W.built = true
@@ -2276,28 +2283,39 @@ function ns.SyncListTabs()
   for k in pairs(LISTKEY) do GROUP_OF[k] = nil TABS[k] = nil KIND[k] = nil end
   for k in pairs(LISTKEY) do LISTKEY[k] = nil end
   local subs = { "shop" }
-  for _, l in ipairs(ns.ShopLists.All()) do
+  for _, l in ipairs(ns.ShopLists.Visible()) do
     local k = ListKey(l.id)
+    local who = ns.ShopLists.OwnerName(l)
     LISTKEY[k], GROUP_OF[k], KIND[k] = l.id, "shop", "mats"
-    TABS[k] = { l.name, ("Eigene Liste \"%s\": Vorrat halten (Taschen abgezogen) oder feste Menge, je Eintrag. Selbst herstellbares (auch von einem anderen Char) mit Mats, wenn billiger. AH-Zeile anklicken: Kauf je Klick."):format(l.name) }
+    TABS[k] = { who and ("%s (%s)"):format(l.name, who) or l.name, (who and ("Liste von " .. who .. ". Rechtsklick: auf diesen Char kopieren oder verschieben. ") or "") .. ("Eigene Liste \"%s\": Vorrat halten (Taschen abgezogen) oder feste Menge, je Eintrag. Selbst herstellbares (auch von einem anderen Char) mit Mats, wenn billiger. AH-Zeile anklicken: Kauf je Klick."):format(l.name) }
     subs[#subs + 1] = k
   end
   SUBS.shop = subs
   if not (W and W.chips) then return end
+  -- first: a list that is gone (deleted, or hidden with the other characters' lists) is no tab while the chips move
+  if not GROUP_OF[tab] then SwitchTab("shop") end
   for _, k in ipairs(subs) do
     if k ~= "shop" then
       local chip = W.chips:Chip(k)
       if not chip then chip = W.chips:Add(k, TABS[k][1]) end
       chip:SetText(TABS[k][1])
+      if chip.Show then chip:Show() end
       chip:SetTooltip(TABS[k][1], { TABS[k][2], "Rechtsklick: umbenennen oder löschen." })
     end
   end
-  -- "+ Neue Liste" stays last
+  -- the switch for the other characters' lists and "+ Neue Liste" stay last
   local chips = W.chips.chips
-  for i, c in ipairs(chips) do if c.key == "slnew" then table.remove(chips, i) chips[#chips + 1] = c break end end
-  for _, c in ipairs(chips) do if c.key and c.key:sub(1, 2) == "sl" and c.key ~= "slnew" and not LISTKEY[c.key] then c:Hide() end end
+  for _, last in ipairs({ "slall", "slnew" }) do
+    for i, c in ipairs(chips) do if c.key == last then table.remove(chips, i) chips[#chips + 1] = c break end end
+  end
+  for _, c in ipairs(chips) do if c.key and c.key:sub(1, 2) == "sl" and c.key ~= "slnew" and c.key ~= "slall" and not LISTKEY[c.key] then c:Hide() end end
+  if W.allLists then
+    local all = ns.ShopLists.ShowAll()
+    W.allLists:SetText(all and "Listen aller Chars" or "Nur meine Listen")
+    W.allLists:SetTooltip("Listen der anderen Chars", { all and "Gezeigt: die Listen aller Chars dieses Accounts. Klick: nur die eigenen." or "Gezeigt: nur die Listen dieses Chars. Klick: auch die der anderen Chars dieses Accounts.",
+      "Eine fremde Liste, die es hier schon als Kopie gibt, steht nur einmal da.", "Rechtsklick auf eine fremde Liste: auf diesen Char kopieren oder verschieben." })
+  end
   W.chips:Place()
-  if not GROUP_OF[tab] then SwitchTab("shop") end
 end
 
 -- what a row puts on a list: a writ (writs tab, a writ on a list) or the item
@@ -2337,7 +2355,7 @@ function ns.ListAddMenu(kind, key, title, first)
   local SL = ns.ShopLists
   local items = {}
   for _, x in ipairs(first or {}) do items[#items + 1] = x end
-  for _, l in ipairs(SL.All()) do
+  for _, l in ipairs(SL.Visible()) do
     local there = SL.Find(l.id, kind, key)
     items[#items + 1] = { text = there and ("Auf \"%s\" (schon drauf: öffnen)"):format(l.name) or ("Auf Liste \"%s\""):format(l.name), onClick = function()
       if not there then SL.Add(l.id, kind, key, 1) end
@@ -2359,7 +2377,7 @@ end
 -- the same entries for other pages (Verkaufen)
 function ns.ListAddItems(kind, key)
   local SL, items = ns.ShopLists, {}
-  for _, l in ipairs(SL.All()) do
+  for _, l in ipairs(SL.Visible()) do
     if not SL.Find(l.id, kind, key) then
       items[#items + 1] = { text = ("Auf Liste \"%s\""):format(l.name), onClick = function() SL.Add(l.id, kind, key, 1) ns.SyncListTabs() ns.Refresh() end }
     end
@@ -2432,7 +2450,24 @@ function ns.ListMenu(id)
   local SL = ns.ShopLists
   local l = SL.Get(id)
   if not l then return end
-  ShowMenu(l.name, {
+  local items = {}
+  -- (Daniel 24.11.2026) a list of another character: onto this one, without doubles
+  if not SL.Mine(l) then
+    items[#items + 1] = { text = "Auf diesen Char kopieren", onClick = function()
+      local own, n = SL.Copy(id)
+      if not own then return end
+      ns.Print(("Liste \"%s\" von %s kopiert: %d Einträge neu."):format(l.name, SL.OwnerName(l) or "?", n or 0))
+      ns.SyncListTabs()
+      ns.SetTab(ListKey(own.id))
+    end }
+    items[#items + 1] = { text = "Zu diesem Char verschieben", onClick = function()
+      local own = SL.Take(id)
+      if not own then return end
+      ns.SyncListTabs()
+      ns.SetTab(ListKey(own.id))
+    end }
+  end
+  for _, x in ipairs({
     { text = "Umbenennen ...", onClick = function()
       ns.AskListName("Liste umbenennen", l.name, function(name) if SL.Rename(id, name) then ns.SyncListTabs() ns.Refresh() end end)
     end },
@@ -2443,7 +2478,8 @@ function ns.ListMenu(id)
         ns.SetTab("shop")
       end)
     end },
-  })
+  }) do items[#items + 1] = x end
+  ShowMenu(l.name, items)
 end
 
 -- a small dialog for the name of a list

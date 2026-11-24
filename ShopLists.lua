@@ -13,11 +13,99 @@ local _, ns = ...
 local SL = {}
 ns.ShopLists = SL
 
+-- (Daniel 24.11.2026: "die selbst angelegten Einkaufslisten sollen für jeden Char des Accounts sichtbar sein, mit wählbar
+-- ob alle angezeigt werden sollen oder nur die eigenen. Fremde ... sollen auch auf die eigene des Chars übertragbar sein,
+-- aber aufpassen, dass keine Doppelungen rein kommen, wenn man alle anzeigt") a list belongs to the character that made
+-- it (l.owner = "Name-Realm"; lists from before go to the character that loads them first). ProfitdonDB.shopAll: the
+-- lists of the other characters show too. A copy remembers its source (l.from); the source then stays hidden here.
+local function Me()
+  local me = ns.Me and ns.Me()
+  if type(me) == "string" and not me:find("?", 1, true) then return me end
+end
 local function Store()
   ns.db.shopLists = type(ns.db.shopLists) == "table" and ns.db.shopLists or {}
+  local me = Me()
+  if me then for _, l in ipairs(ns.db.shopLists) do if not l.owner then l.owner = me end end end
   return ns.db.shopLists
 end
 function SL.All() return Store() end
+function SL.Mine(l) return l ~= nil and (l.owner == nil or l.owner == Me()) end
+-- the owner's name without the realm, nil for an own list
+function SL.OwnerName(l)
+  if not l or SL.Mine(l) then return nil end
+  return (tostring(l.owner):gsub("%-.*$", ""))
+end
+function SL.ShowAll() return ns.db.shopAll and true or false end
+function SL.SetShowAll(on) ns.db.shopAll = on and true or nil end
+local function Key(e) return e.writ and ("w" .. e.writ) or ("i" .. tostring(e.item)) end
+-- the same name and the same entries (the counts may differ)
+local function Alike(a, b)
+  if a.name ~= b.name or #a.items ~= #b.items then return false end
+  local have = {}
+  for _, e in ipairs(a.items) do have[Key(e)] = true end
+  for _, e in ipairs(b.items) do if not have[Key(e)] then return false end end
+  return true
+end
+-- the own list that is the copy of a foreign one: made from it, or alike
+function SL.CopyOf(src)
+  local alike
+  for _, l in ipairs(Store()) do
+    if l ~= src and SL.Mine(l) then
+      if l.from == src.id then return l end
+      if not alike and Alike(l, src) then alike = l end
+    end
+  end
+  return alike
+end
+-- the lists the window shows: the own ones, with "all" also those of the other characters that have no copy here
+function SL.Visible()
+  local out, all = {}, SL.ShowAll()
+  for _, l in ipairs(Store()) do
+    if SL.Mine(l) then out[#out + 1] = l
+    elseif all and not SL.CopyOf(l) then out[#out + 1] = l end
+  end
+  return out
+end
+local function Merge(dst, src)
+  local have, n = {}, 0
+  for _, e in ipairs(dst.items) do have[Key(e)] = true end
+  for _, e in ipairs(src.items) do
+    if not have[Key(e)] then
+      have[Key(e)] = true
+      n = n + 1
+      table.insert(dst.items, { item = e.item, writ = e.writ, n = e.n, fixed = e.fixed, alarm = e.alarm })
+    end
+  end
+  return n
+end
+-- a foreign list onto this character: a list of its own with the same name; a copy that is there already (or an own
+-- list of that name) only takes the entries it lacks. Returns the own list and how many entries came.
+function SL.Copy(id)
+  local src = SL.Get(id)
+  if not src or SL.Mine(src) then return nil end
+  local dst = SL.CopyOf(src)
+  if not dst then
+    for _, l in ipairs(Store()) do if SL.Mine(l) and l.name == src.name then dst = l break end end
+  end
+  if not dst then dst = SL.New(src.name) end
+  if not dst then return nil end
+  dst.from = dst.from or src.id
+  return dst, Merge(dst, src)
+end
+-- a foreign list moves to this character (its copy here takes its entries instead and the foreign one goes)
+function SL.Take(id)
+  local src = SL.Get(id)
+  if not src or SL.Mine(src) then return nil end
+  local dst = SL.CopyOf(src)
+  if dst then
+    Merge(dst, src)
+    dst.from = nil
+    SL.Delete(id)
+    return dst
+  end
+  src.owner, src.from = Me(), nil
+  return src
+end
 function SL.Get(id)
   for i, l in ipairs(Store()) do if l.id == id then return l, i end end
 end
@@ -27,7 +115,7 @@ function SL.New(name)
   local id = math.max(1, math.floor(tonumber(ns.db.shopListNext) or 1))
   for _, l in ipairs(Store()) do if (l.id or 0) >= id then id = l.id + 1 end end
   ns.db.shopListNext = id + 1
-  local l = { id = id, name = name, items = {} }
+  local l = { id = id, name = name, items = {}, owner = Me() }
   table.insert(Store(), l)
   return l
 end
@@ -103,7 +191,7 @@ function SL.Alarm(item, price)
   local hit = 0
   for _, l in ipairs(Store()) do
     for _, e in ipairs(l.items or {}) do
-      if e.item == item and e.alarm then
+      if e.item == item and e.alarm and SL.Mine(l) then
         if price and price <= e.alarm then
           if not e.alarmOn then
             e.alarmOn = true
@@ -125,7 +213,7 @@ function SL.CheckAlarms(key, item)
   for _, l in ipairs(Store()) do
     for _, e in ipairs(l.items or {}) do
       local id = e.item
-      if id and e.alarm and not seen[id] and (not item or item == id) then
+      if id and e.alarm and SL.Mine(l) and not seen[id] and (not item or item == id) then
         seen[id] = true
         hit = hit + SL.Alarm(id, P.Row(key, id) and P.Low(id, key) or nil)
       end

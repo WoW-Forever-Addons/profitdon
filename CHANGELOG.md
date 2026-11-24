@@ -1,5 +1,10 @@
 # Profitdon
 
+## 0.2.32
+- Eigene Einkaufslisten gehören jetzt dem Char, der sie anlegt. Chip "Nur meine Listen" / "Listen aller Chars" im Reiter Einkaufsliste schaltet die Listen der anderen Chars des Accounts dazu (mit Charname am Chip).
+- Rechtsklick auf eine fremde Liste: "Auf diesen Char kopieren" oder "Zu diesem Char verschieben". Eine Kopie nimmt beim erneuten Kopieren nur die fehlenden Einträge, und die fremde Liste steht neben ihrer Kopie nicht noch einmal da.
+- Bisherige Listen gehören dem Char, der sie nach dem Update zuerst lädt. Preiswecker melden nur für die Listen des eigenen Chars.
+
 ## 0.2.31
 - Weniger Ruckler: die Rechnung "lohnt bis" und "Platz für" jedes Rezepts macht im Hintergrund nach jedem Schritt Pause, kein Schritt der Rezeptlisten dauert länger als ein paar Millisekunden.
 - Die Liste "Für Händler" wird nicht mehr nach jedem Looten und jede Minute neu gerechnet, sondern nur, wenn sich Mats, Platz in den Taschen, Preise oder Rezepte ändern.
