@@ -1929,9 +1929,9 @@ ns.WindowPage = function(k) return Page(k) end -- (tests)
 local function BuildWith()
   ns.db.win = ns.db.win or {}
   W = UI.Window("ProfitdonFrame", { title = "Profitdon", logo = "Interface\\AddOns\\Profitdon\\Media\\portrait",
-    -- (16.11.2026, DonCore Blizz 5) the module's frame would put a button for DonCore's options window at the top right,
-    -- over the first row; Profitdon's Blizzard window had none (its options live in the game's own window)
-    options = UI == Kit and "Profitdon" or nil, hint = "/profit optionen", footer = true, attic = true, store = ns.db.win, width = 760, height = 520,
+    -- (Daniel 24.11.2026, Bild Kaufen: "ich finde kein optionen knopf") the module's button for the options window in
+    -- the title bar, left of the close button (with the attic it stands there, not over the first row as on 16.11.2026)
+    options = "Profitdon", hint = "/profit optionen", footer = true, attic = true, store = ns.db.win, width = 760, height = 520,
     onTab = function(key)
       if W and W.built and not W.syncing then
         local k = ns.db.ui and ns.db.ui[key]
@@ -2067,7 +2067,15 @@ local function BuildWith()
     ns.Call(ic.EnableMouse, ic, true)
     ic:SetScript("OnEnter", function(self)
       local p = self.perk
-      if p then UI.Tooltip(self, { text = p.title, icon = p.icon, badge = p.on and "aktiv" or "aus" }, p.lines) end
+      if p then UI.Tooltip(self, { text = p.title, icon = p.icon, badge = p.on and "aktiv" or "aus" }, p.lines, p.hint) end
+    end)
+    ic:SetScript("OnMouseUp", function(self)
+      local p = self.perk
+      if not (p and p.onClick) then return end
+      p.onClick()
+      W.perks:Update()
+      local enter = self:GetScript("OnEnter")
+      if enter then enter(self) end
     end)
     ic:SetScript("OnLeave", function(self) UI.HideTooltip(self) end)
     W.perks.icons[i] = ic

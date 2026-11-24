@@ -1,5 +1,9 @@
 # Profitdon
 
+## 0.2.48
+- Optionen-Knopf oben in der Titelleiste, links neben dem Schließen-Kreuz.
+- Klick auf das Symbol Boosted Disenchanting rechnet alle Entzauberwerte so, als liefe der Buff. So siehst du vorher, ob sich der Arcane Salvager lohnt. Noch ein Klick stellt zurück. Deine eigenen Entzauberungen werden weiter nach dem echten Buff mitgeschrieben.
+
 ## 0.2.47
 - Master Chef wird je Charakter gemerkt statt einmal für alle. Ein Char, der selbst kocht, rechnet mit seinem eigenen Stand. Ein Char ohne Kochen (etwa am Auktionshaus) rechnet mit dem Stand deines besten Kochs. Der Tooltip des Symbols sagt, wessen Stand gilt.
 

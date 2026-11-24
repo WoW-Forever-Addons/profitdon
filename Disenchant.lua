@@ -203,10 +203,27 @@ local function ReadBuff()
   end
   return pct or DE.BUFF_PCT
 end
-function DE.BuffPct()
+-- the buff as it runs on the character (0 without, or with the option off)
+function DE.BuffReal()
   if ns.Opt("deBuff") == false then return 0 end
   if buffPct == nil then buffPct = ReadBuff() end
   return buffPct
+end
+-- (Daniel 24.11.2026: "für arcane salvaer eine option, das einzuschalten für die suche um zu schauen ob es sich lohnt")
+-- ProfitdonDB.deAssume: every disenchant value is reckoned as if the buff ran (a click on its mark over the lists),
+-- to see before setting the Arcane Salvager up whether it pays. What is written down of the own disenchants follows
+-- the real buff only (DE.Record).
+function DE.Assumed() return ns.db and ns.db.deAssume and true or false end
+function DE.SetAssume(on)
+  if not ns.db then return end
+  ns.db.deAssume = on and true or nil
+  DE.ver = (DE.ver or 0) + 1
+  if ns.OptionChanged then ns.OptionChanged() end
+end
+function DE.BuffPct()
+  local real = DE.BuffReal()
+  if DE.Assumed() then return math.max(real, DE.BUFF_PCT) end
+  return real
 end
 function DE.Bonus() return 1 + math.max(0, tonumber(ns.Opt("deBonus")) or 0, DE.BuffPct()) / 100 end
 -- the buff came or went: every disenchant value changes, the lists are worked out again
@@ -365,7 +382,7 @@ function DE.TipLines(group, key, id, T)
   if value then lines[#lines + 1] = { T.expect .. (missing and T.noMats or ""), ns.Money(value) } end
   if DE.Bonus() > 1 then
     lines[#lines + 1] = (T.bonus .. "."):format(math.floor((DE.Bonus() - 1) * 100 + 0.5),
-      DE.BuffPct() > 0 and T.boosted or T.option)
+      DE.BuffReal() > 0 and T.boosted or DE.BuffPct() > 0 and T.assumed or T.option)
   end
   lines[#lines + 1] = T.rates:format(ns.TipSrc(T, src) or "?", DE.Skill(group) or "?")
   local tsm, off = DE.TSMCheck(id, group)
@@ -395,7 +412,7 @@ local function BuffRuns()
   return ok and type(aura) == "table"
 end
 function DE.Record(group, loot)
-  local where = (DE.BuffPct() > 0 or BuffRuns()) and "deStatsBuff" or "deStats"
+  local where = (DE.BuffReal() > 0 or BuffRuns()) and "deStatsBuff" or "deStats"
   ns.db[where] = ns.db[where] or {}
   local s = ns.db[where][group]
   if type(s) ~= "table" then s = { n = 0, m = {} } ns.db[where][group] = s end

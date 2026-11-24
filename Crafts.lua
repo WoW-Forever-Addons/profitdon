@@ -272,10 +272,11 @@ function Cr.Perks()
   local DE = ns.DE
   local skill = Cr.MySkill(Cr.ENCHANTING)
   local opt = ns.Opt("deBuff") ~= false
-  local buff = DE and DE.BuffPct and DE.BuffPct() or 0
+  local buff = DE and DE.BuffReal and DE.BuffReal() or 0
+  local assume = DE and DE.Assumed and DE.Assumed() or false
   local CS = rawget(_G, "C_Spell")
   local icon = DE and type(CS) == "table" and CS.GetSpellTexture and ns.Call(CS.GetSpellTexture, DE.BUFF_SPELL) or nil
-  local de = { key = "de", on = skill ~= nil and buff > 0, icon = icon or Cr.DE_ICON, title = "Boosted Disenchanting", lines = {} }
+  local de = { key = "de", on = assume or (skill ~= nil and buff > 0), icon = icon or Cr.DE_ICON, title = "Boosted Disenchanting", lines = {} }
   de.lines[1] = skill and ("Verzauberer erkannt (Skill %d)."):format(skill) or "Dieser Char ist kein Verzauberer."
   if not opt then
     de.lines[2] = "Die Erkennung des Buffs ist in den Optionen aus."
@@ -287,6 +288,15 @@ function Cr.Perks()
   end
   local hand = tonumber(ns.Opt("deBonus")) or 0
   if hand > 0 then de.lines[#de.lines + 1] = ("Von Hand eingestellt: %d %% (der größere Wert zählt)."):format(hand) end
+  -- (Daniel 24.11.2026: "eine option, das einzuschalten für die suche um zu schauen ob es sich lohnt") a click reckons
+  -- as if the buff ran
+  if assume then
+    de.lines[#de.lines + 1] = ("|cffe6b422Angenommen: alle Entzauberwerte sind mit %d %% mehr Mats gerechnet, als liefe der Buff.|r"):format(DE.BuffPct())
+    de.hint = "Klick: wieder so rechnen, wie es wirklich ist"
+  else
+    de.hint = "Klick: so rechnen, als liefe der Buff (lohnt sich der Arcane Salvager?)"
+  end
+  de.onClick = function() DE.SetAssume(not DE.Assumed()) end
   return { chef, de }
 end
 
