@@ -1,5 +1,10 @@
 # Profitdon
 
+## 0.2.37
+- Auswertung: beim Verlassen der Welt (Ausloggen, Ladebildschirm) wurde das ganze Gold einmal als "Unterhalt" ausgegeben gebucht. Das passiert nicht mehr; die alten Fehlbuchungen werden beim nächsten Login einmal herausgenommen.
+- Auswertung: "Gesamt" zeigte nur den heutigen Tag, jetzt alles seit Beginn (auch "Je Produkt").
+- Herstellen, Berufe: "Rechne die Rezepte ..." blieb stehen, solange hergestellt wurde; die fertige Liste erscheint jetzt sofort.
+
 ## 0.2.36
 - Einkaufsliste: der Rechtsklick auf einen Eintrag einer eigenen Liste beginnt wieder mit "Im AH suchen" (fehlte, seit Gegenstand und Kaufzeile eine Zeile sind).
 

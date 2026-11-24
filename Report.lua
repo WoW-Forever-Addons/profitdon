@@ -96,6 +96,48 @@ function R.Book(method, out, inn, n)
   for day in pairs(r.book) do if d - day > 400 then r.book[day] = nil end end
 end
 
+-- (Daniel 24.11.2026, Bild: "Unterhalt -342g", Ledger.lua Settle) the old bookings of the whole gold as upkeep, taken out
+-- once: a day whose upkeep is at least 90 % of the least gold the curve has for that day, while the curve shows no fall
+-- of half that size (a real expense that large is a step down in the curve: Mairi 15.11. 58g to 28g stays). The amount
+-- is kept in r.fixed[day]. Only days with at most ten upkeep bookings (the wrong ones are one or two large ones; many
+-- small ones with little gold are a trainer). Returns what was taken out: { { who, day, copper } }.
+function R.FixZeroGold(report, dry)
+  local found = {}
+  for who, r in pairs(type(report) == "table" and report or {}) do
+    if type(r) == "table" and type(r.book) == "table" and type(r.curve) == "table" then
+      local low, fall, prev = {}, {}, {}
+      for _, c in ipairs(r.curve) do
+        local hour, g = tonumber(c[1]), tonumber(c[2])
+        if hour and g then
+          local d = R.Day(hour * 3600)
+          if not low[d] or g < low[d] then low[d] = g end
+          if prev[d] and prev[d] - g > (fall[d] or 0) then fall[d] = prev[d] - g end
+          prev[d] = g
+        end
+      end
+      for d, list in pairs(r.book) do
+        local u = type(list) == "table" and list.upkeep
+        local out = u and tonumber(u[1]) or 0
+        if low[d] and low[d] >= 10000 and out >= 0.9 * low[d] and (fall[d] or 0) < 0.5 * out and (tonumber(u[3]) or 0) <= 10 then
+          found[#found + 1] = { who, d, out }
+          if not dry then
+            r.fixed = type(r.fixed) == "table" and r.fixed or {}
+            r.fixed[d] = (r.fixed[d] or 0) + out
+            u[1] = 0
+            if (u[2] or 0) == 0 then list.upkeep = nil end
+          end
+        end
+      end
+    end
+  end
+  return found
+end
+ns.On("PLAYER_LOGIN", function()
+  if not ns.db or ns.db.fixZeroGold then return end
+  ns.db.fixZeroGold = true
+  ns.Try(R.FixZeroGold, ns.db.report)
+end)
+
 -- per method over the last "days" days (nil: all, 0: today): { method = { out, in, n, net } }, and the sums
 function R.Methods(days, who)
   local r, today = Store(who), R.Day()
@@ -564,7 +606,10 @@ function R.Page(parent, redraw, kit)
     for _, c in ipairs(pts) do wealth[#wealth + 1] = { c[1], c[2] + c[3] } gold[#gold + 1] = { c[1], c[2] } end
     self.chart:SetSeries({ { points = wealth, color = C.goldBright, label = "Gold und Ware" }, { points = gold, color = C.blue, label = "Gold" } })
     self.rangeSeg:Update(self.range)
-    local days = self.period == -1 and nil or self.period
+    -- (Daniel 24.11.2026, Bild: "unter gesamt steht ja quasi gar nicht") "x and nil or y" is always y: Gesamt asked for -1
+    -- days and got today only
+    local days = self.period
+    if days == -1 then days = nil end
     local meth = R.Methods(days)
     local entries = {}
     for _, m in ipairs(R.METHODS) do

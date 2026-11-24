@@ -243,6 +243,15 @@ end
 -- (24.11.2026) a row of a craft list is built once for its recipe's value (v, new with every new reckoning, Crafts.lua
 -- Cr.RowsSoon) and taken again at the next redraw; only "chosen" is set anew. An item name still missing builds it again.
 -- (24.11.2026, Runde 5: the redraw after a new list took 16.5 ms on the laptop, every row built at once) rowPause: set
+-- (Daniel 24.11.2026, Bild Herstellen: "steht manchmal ganz lange da und wenn ich erneut auf für händler klicke erscheint
+-- direkt alles") the window shows "Rechne die Rezepte ..." instead of a list: the finished list is drawn at once, not
+-- after the casting and the craft queue (ns.WhenIdle waited as long as he crafted)
+local calcNote
+local function DrawDone()
+  if not (W and W:IsShown()) then return end
+  if calcNote then calcNote = nil ns.After(0.05, ns.Refresh) else ns.WhenIdle("Hauptfenster", ns.Refresh, 0.05) end
+end
+ns.WindowCalcNote = function() return calcNote end -- (tests)
 -- while the job "Fenster Zeilen" (ns.RowsDone) builds the rows ahead, a slice may end before each row built
 local rowPause
 local function KeptRow(v, key, build)
@@ -503,7 +512,7 @@ local function Rows()
     local mode, prof = PROF_MODE[tab], Cr.ViewProf()
     if not prof then out[1] = { kind = "note", text = "Keine Rezeptdaten." } return out end
     local rows, missing, st = Cr.ProfRowsSoon(prof, mode)
-    if not rows then out[1] = { kind = "note", text = "Rechne die Rezepte ..." } return out end
+    if not rows then calcNote = true out[1] = { kind = "note", text = "Rechne die Rezepte ..." } return out end
     local hidden
     rows, hidden = Found(rows)
     FoundNote(out, hidden)
@@ -550,7 +559,7 @@ local function Rows()
     local view = tab == "demake" and Cr.DeView() or "mine"
     local rows, missing, st
     if view ~= "mine" then rows, missing, st = Cr.ProfRowsSoon(view, mode) else rows, missing, st = Cr.RowsSoon(mode) end
-    if not rows then out[1] = { kind = "note", text = "Rechne die Rezepte ..." } return out end
+    if not rows then calcNote = true out[1] = { kind = "note", text = "Rechne die Rezepte ..." } return out end
     local hidden
     rows, hidden = Found(rows)
     FoundNote(out, hidden)
@@ -2125,13 +2134,13 @@ end)
 -- With the window shut too (the list worked out ahead, ns.WindowPrewarm): its first opening then draws kept rows.
 function ns.RowsDone()
   local shown = W and W:IsShown()
-  if not (CRAFT_MODE[tab] or PROF_MODE[tab]) then if shown then ns.WhenIdle("Hauptfenster", ns.Refresh, 0.05) end return end
+  if not (CRAFT_MODE[tab] or PROF_MODE[tab]) then if shown then DrawDone() end return end
   ns.Job("Fenster Zeilen", function(pause)
     local function p() rowPause = nil pause() rowPause = p end
     rowPause = p
     Rows()
     rowPause = nil
-    if W and W:IsShown() then ns.WhenIdle("Hauptfenster", ns.Refresh, 0.05) end
+    DrawDone()
   end, function() rowPause = nil end)
 end
 -- (24.11.2026, Laptop: the first opening on Herstellen 2603 ms) the list the window opens on is worked out after the

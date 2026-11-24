@@ -317,11 +317,16 @@ local function Baseline()
   booked0 = tot and (tot[2] - tot[1]) or 0
 end
 
-local soon
+local soon, leaving
 local function Settle()
   soon = nil
   if not gold then Baseline() return end
   local now = Gold()
+  -- (Daniel 24.11.2026, Bild Auswertung: "Unterhalt -342g" on a level 10 character; 18.11. two bookings of the whole gold,
+  -- laptop 21.11. 205g 82s = the gold of that hour) leaving the world the game reads the gold as 0 once: the whole gold was
+  -- booked as spent and never came back in the books. No gold read with gold known is not a change; while leaving nothing
+  -- is settled (PLAYER_LEAVING_WORLD), the next entering sets the gold anew.
+  if leaving or (now == 0 and gold > 0) then return end
   local delta = now - gold
   if Open("merchant") and shop then
     if not MerchantSettle(delta) then return end
@@ -354,7 +359,14 @@ end
 
 
 ns.On("PLAYER_LOGIN", function() if not gold then Baseline() end end)
-ns.On("PLAYER_ENTERING_WORLD", function() if not gold then Baseline() end end)
+ns.On("PLAYER_ENTERING_WORLD", function()
+  -- after a loading screen the gold counts from what is there now (nothing is earned or spent while loading)
+  if leaving then leaving = nil local g = Gold() if g > 0 then gold = g end end
+  if not gold then Baseline() end
+end)
+ns.On("PLAYER_LEAVING_WORLD", function() leaving = true end)
+ns.On("PLAYER_LOGOUT", function() leaving = true end)
+function L._Leaving(v) leaving = v or nil end -- (tests)
 ns.On("PLAYER_MONEY", SettleSoon)
 ns.On("BAG_UPDATE_DELAYED", function() if shop then SettleSoon() end end)
 ns.On("MERCHANT_SHOW", function() openAt.merchant = true shop = { bags = Counts(), sold = {} } end)
