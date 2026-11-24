@@ -634,6 +634,7 @@ local function Rows()
       -- ein X für das löschen") each recipe on top with its mats indented below, its X takes the whole branch off the list
       local SRC = { vendor = "beim Händler (Knopf Mats kaufen)", ah = "im AH", craft = "selbst herstellen", stock = "in den Taschen", mail = "gekauft" }
       local sumAH, sumVendor, noPrice, wayN, firstHead = 0, 0, 0, 0, nil
+      local goneN = 0
       local favorCost, favorN = 0, 0
       local shop = Cr.ShoppingList(entries, true)
       -- (Daniel 24.11.2026, Fenstercheck b6 67 s: "nicht noch einen zweiten da unter ... könnte dann direkt daneben stehen")
@@ -803,6 +804,10 @@ local function Rows()
             e.purpose = ("für %s (selbst herstellen)%s"):format((ItemName(e.forVia)), target and (" für " .. target) or "")
           elseif target then e.purpose = "für " .. target end
           local srcText = SRC[e.src] or e.src
+          -- (Daniel 24.11.2026: "icebreaker ist bei einer suche gar nicht im ah") the live check found no offer: the row
+          -- says so, its old price is not part of the sum
+          local gone = e.none and e.src == "ah" and not e.alt and (e.need or 0) > 0
+          if gone then srcText = RED .. "gerade nicht im AH (live geprüft)|r" end
           if e.src == "craft" and e.via and e.via.spell and not Cr.IKnow(e.via.spell) then
             local who = Cr.WhoMakes(e.via.spell)
             if who then srcText = ("herstellen lassen (%s)"):format(Sk.Short(who)) end
@@ -824,7 +829,7 @@ local function Rows()
             sub = sub .. (", selbst herstellen spart nur %s/h, %s bringt %s/h"):format(M(perH),
               h and h.item and (ItemName(h.item)) or "Herstellen für den Händler", M(g or 0))
           end
-          local it = Row(e.id, sub, { need = (not optional) and e.need or "", unit = M(e.unit), cost = (not optional and (e.need or 0) > 0) and M(e.cost) or "" }, e, nil,
+          local it = Row(e.id, sub, { need = (not optional) and e.need or "", unit = gone and "" or M(e.unit), cost = (not gone and not optional and (e.need or 0) > 0) and M(e.cost) or "" }, e, nil,
             { indent = (e.depth or 0) * 14, sv = { need = e.need, unit = e.unit, cost = e.cost } })
           if optional then it.titleColor = C.quiet it.subColor = C.quiet it.cellColors = { unit = C.quiet } end
           it.active = B.entry and B.kind == "mats" and B.entry.id == e.id
@@ -840,7 +845,8 @@ local function Rows()
           end
           out[#out + 1] = it
           if not e.alt and (e.need or 0) > 0 and e.src ~= "craft" then
-            if not e.cost then noPrice = noPrice + 1
+            if gone then goneN = goneN + 1
+            elseif not e.cost then noPrice = noPrice + 1
             elseif e.src == "vendor" then sumVendor = sumVendor + e.cost
             else sumAH = sumAH + e.cost end
           end
@@ -856,7 +862,7 @@ local function Rows()
       -- (Daniel 24.11.2026, Fenstercheck b6 s0056: "Summenzeile dunkelrot und winzig") the sum is a row of its own in the
       -- row's type: the total in the title and in the column Summe, the parts below; red only when the gold is short.
       -- item.text keeps the whole line (sumLine: the tests and the bar read it)
-      if total == 0 and noPrice == 0 then
+      if total == 0 and noPrice == 0 and goneN == 0 then
         out[#out + 1] = { kind = "trow", sumLine = true, title = "Einkauf: nichts mehr zu kaufen", titleColor = C.green, markColor = C.green,
           sub = ("dein Gold %s%s"):format(ns.Money(gold), way), cells = {},
           text = ("Einkauf: nichts mehr zu kaufen%s  ·  dein Gold %s"):format(way, ns.Money(gold)) }
@@ -864,7 +870,8 @@ local function Rows()
       else
         local favorBit = favorN > 0 and ("  ·  je Gunst %s (%d Gunst)"):format(ns.Money(math.floor(favorCost / favorN + 0.5)), favorN) or ""
         local missBit = short and ("  ·  es fehlen " .. ns.Money(total - gold)) or ""
-        local priceBit = noPrice > 0 and ("  ·  %d Mats ohne Preis"):format(noPrice) or ""
+        local priceBit = (noPrice > 0 and ("  ·  %d Mats ohne Preis"):format(noPrice) or "")
+          .. (goneN > 0 and ("  ·  %d gerade nicht im AH"):format(goneN) or "")
         out[#out + 1] = { kind = "trow", sumLine = true, markColor = short and C.red or nil,
           title = ("Einkauf gesamt %s%s"):format(ns.Money(total), short and ("   %sEs fehlen %s|r"):format(RED, ns.Money(total - gold)) or ""),
           titleColor = C.title,

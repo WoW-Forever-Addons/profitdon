@@ -1,5 +1,9 @@
 # Profitdon
 
+## 0.2.39
+- Einkaufsliste, "Live prüfen": Ausrüstung und andere Einzelgegenstände (keine Handelsware) wurden zwar gesucht, das Ergebnis aber nicht übernommen, die Liste blieb beim Preis des letzten Scans. Jetzt zählt das billigste Angebot, und der Preis bleibt auch nach den 15 Minuten.
+- Einkaufsliste: steht ein Gegenstand laut Live-Prüfung gar nicht im AH, sagt die Zeile "gerade nicht im AH" und sein alter Preis zählt nicht mehr in "Einkauf gesamt".
+
 ## 0.2.38
 - Beim Händler kaufen: führt der Händler einzelne Käufe einer Runde nicht aus, merkt Profitdon das am Gold und kauft das Fehlende von selbst nach. Die Zeile im Chat nennt, was wirklich bezahlt wurde.
 

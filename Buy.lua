@@ -495,6 +495,38 @@ local function KeepBook(id)
   ns.liveVer = (ns.liveVer or 0) + 1
   if ns.ShopLists then ns.ShopLists.Alarm(id, rows[1] and rows[1].unitPrice or nil) end -- (24.11.2026) price alarms
 end
+-- (Daniel 24.11.2026, Bild Einkaufsliste: Destiny 418g in der Liste, 349g im AH; Taran Icebreaker 79g, "bei einer suche gar
+-- nicht im ah ... trotz live prüfen") the live check kept only commodity answers: a piece of equipment answers with
+-- ITEM_SEARCH_RESULTS_UPDATED, was dropped after 4 s and the list stayed at the price of the last scan. Its offers are
+-- kept the same way (one auction a row, cheapest first) and become the item's row in the scan store as in the
+-- Berufsscan, so the price holds after the 15 minutes; a full answer without an offer takes the old row away.
+local function KeepItemBook(id, key)
+  local n = ns.Num(ns.Call(ns.AH.GetNumItemSearchResults, key)) or 0
+  local rows, offers = {}, {}
+  for i = 1, math.min(n, 500) do
+    local r = ns.Call(ns.AH.GetItemSearchResultInfo, key, i)
+    local p = type(r) == "table" and not r.containsOwnerItem and ns.Num(r.buyoutAmount)
+    if p and p > 0 then
+      local q = math.max(1, ns.Num(r.quantity) or 1)
+      rows[#rows + 1] = { unitPrice = p, quantity = q }
+      offers[#offers + 1] = { p, q }
+    end
+  end
+  table.sort(rows, function(a, b) return a.unitPrice < b.unitPrice end)
+  local full = not ns.AH.HasFullItemSearchResults or ns.Call(ns.AH.HasFullItemSearchResults, key) ~= false
+  ns.liveBook[id] = { t = time(), rows = rows, full = full }
+  if rows[1] then
+    ns.Prices.SaveItem(nil, id, ns.AggOffers(offers, full))
+    ns.fresh[id] = { p = rows[1].unitPrice, t = time() }
+    ns.SellDirty()
+  elseif full then
+    ns.Prices.SaveItem(nil, id, nil)
+    ns.fresh[id] = nil
+    ns.SellDirty()
+  end
+  ns.liveVer = (ns.liveVer or 0) + 1
+  if ns.ShopLists then ns.ShopLists.Alarm(id, rows[1] and rows[1].unitPrice or nil) end
+end
 
 local L = { queue = {}, busy = nil }
 ns.LiveState = L
@@ -535,6 +567,14 @@ ns.On("COMMODITY_SEARCH_RESULTS_UPDATED", function(_, id)
   notify()
 end)
 ns.On("ITEM_SEARCH_RESULTS_UPDATED", function(_, key)
+  -- (24.11.2026) the answer of the live check for a piece of equipment
+  local lid = type(key) == "table" and ns.Num(key.itemID)
+  if lid and L.busy == lid then
+    KeepItemBook(lid, key)
+    L.busy = "wait"
+    ns.After(0.3, LiveNext)
+    notify()
+  end
   if B.state ~= "searching" and B.state ~= "ready" then return end
   if type(key) == "table" and ns.Num(key.itemID) ~= B.id then return end
   B.isCommodity, B.state = false, "ready"

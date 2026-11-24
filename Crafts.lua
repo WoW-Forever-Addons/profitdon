@@ -1432,7 +1432,9 @@ function Cr.ShoppingList(entries, grouped)
       local _, _, offers = P.AH(id)
       if offers and from + need > offers then short = true end
     end
-    return unit, short and true or false, src == "live"
+    -- (Daniel 24.11.2026: "icebreaker ist bei einer suche gar nicht im ah") a fresh search found no offer at all
+    local b = P.Live(id)
+    return unit, short and true or false, src == "live", (b and not b.rows[1]) and true or false
   end
   local function add(id, total, depth, unit, src, via, forVia)
     local held = fixedNow and 0 or math.min(total, math.max(0, left[id] or 0))
@@ -1456,15 +1458,15 @@ function Cr.ShoppingList(entries, grouped)
       if at and each + Cr.TimeGold(sec) < at then src, unit, via = "craft", each, r end
     end
     local timeBuy = src == "ah" and select(7, Cr.ReagentUnit(id)) or nil
-    local short, live
+    local short, live, none
     if src == "ah" and need > 0 then
       local u
-      u, short, live = AhPrice(id, need)
+      u, short, live, none = AhPrice(id, need)
       unit = u or unit
     end
     local e = { id = id, total = total, held = held, way = way > 0 and way or nil, need = need, depth = depth, src = need == 0 and (held < total and "mail" or "stock") or src, unit = unit,
       cost = (src ~= "craft" and unit) and unit * need or nil, maxUnit = unit and math.max(unit + 2, math.ceil(unit * 1.25)) or nil, via = via,
-      short = short or nil, live = live or nil, timeBuy = timeBuy,
+      short = short or nil, live = live or nil, none = none or nil, timeBuy = timeBuy,
       forItem = headItem, forRuns = headRuns, forVia = forVia, forSpell = headSpell,
       fixed = fixedNow or nil } -- (24.11.2026, Merchant.lua MatsPlan)
     out[#out + 1] = e
