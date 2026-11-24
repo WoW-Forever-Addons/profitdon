@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.29
+- Kaufen: Rechtsklick auf ein Ergebnis setzt den Gegenstand auf eine eigene Einkaufsliste (oder eine neue), wie in den anderen Reitern.
+
 ## 0.2.28
 - Fenster beim Händler: die erste Zeile zum Verkaufen ist schon gewählt, ein Klick auf Verkaufen genügt; ist sie verkauft, rückt die nächste nach.
 - Kaufen zählt die Anzahl in der Zeile mit herunter, auch "Kaufen läuft ..." in der Leiste erscheint jetzt.

@@ -1,4 +1,4 @@
-local Bz = LibStub("DonCore-1.0"):NewModule("Blizz", 12)
+local Bz = LibStub("DonCore-1.0"):NewModule("Blizz", 13)
 if not Bz then return end
 
 ---------------------------------------------------------------------------
@@ -45,7 +45,7 @@ local K = setmetatable({}, { __index = Kit or {} })
 Bz.kit = K
 Bz.K = K -- (Profitdon's name for the kit)
 K.blizzLook = true -- a caller can tell the two kits apart
-Bz.VERSION = 12
+Bz.VERSION = 13
 Bz.ROW_H = 24 -- the row height of Bz.List without opts.rowHeight (Profitdon's craft and sell lists)
 if Bz.light == nil then Bz.light = true end
 
@@ -3173,15 +3173,94 @@ function K.ListRow(parent)
   return Repaint(r, ListPaint)
 end
 
--- the head of a group: a light gold band, the game's plus and minus, gold text, the count on the right. r.arrow keeps
--- the Kit's calls (SetText "+", "-" or ""), it shows the game's buttons.
+-- the head of a group. (minor 13, Daniel 24.11.2026, pictures of Profitdon's categories and the game's cooking window:
+-- "unsere reiter sollen so aussehen wie diese von blizzard ... dürfte sich über alle addons ziehen") the game's own bar
+-- (ListHeaderThreeSliceTemplate's three slices: Options_ListExpand_Left, _Middle, _Right with the plus, _Right_Expanded
+-- with the minus), the text on the left in gold, white under the mouse, the count before the plus. A head that does not
+-- fold (item.static) closes with the left end mirrored. A client without these atlases keeps the look before: a light
+-- gold band, the game's plus and minus buttons on the left. r.arrow keeps the Kit's calls (SetText "+", "-" or "").
+local BAR_LEFT, BAR_MID = "Options_ListExpand_Left", "_Options_ListExpand_Middle"
+local BAR_PLUS, BAR_MINUS = "Options_ListExpand_Right", "Options_ListExpand_Right_Expanded"
+local BAR_TEXT_X, BAR_H = 10, 26
+local function AtlasInfo(name)
+  local T = C_Texture
+  if type(T) ~= "table" or type(T.GetAtlasInfo) ~= "function" then return nil end
+  local ok, info = pcall(T.GetAtlasInfo, name)
+  if ok and type(info) == "table" and (tonumber(info.width) or 0) > 0 and (tonumber(info.height) or 0) > 0 then return info end
+  return nil
+end
+local barInfo
+local function BarInfo()
+  if barInfo == nil then
+    local l, m, p, o = AtlasInfo(BAR_LEFT), AtlasInfo(BAR_MID), AtlasInfo(BAR_PLUS), AtlasInfo(BAR_MINUS)
+    barInfo = (l and m and p and o) and { left = l, plus = p, minus = o } or nil
+  end
+  return barInfo
+end
+function Bz.GroupBar() return BarInfo() ~= nil end
+
+-- one set of the three slices on a row; hot = the highlight over it (added, 0.4 as the game's template)
+local function BarSet(r, info, h, hot)
+  local set = { h = h, info = info }
+  local function Slice()
+    local t = r:CreateTexture(nil, hot and "BORDER" or "BACKGROUND")
+    if hot then
+      if t.SetBlendMode then t:SetBlendMode("ADD") end
+      t:SetAlpha(0.4)
+    end
+    return t
+  end
+  set.left, set.right, set.mid = Slice(), Slice(), Slice()
+  set.left:SetAtlas(BAR_LEFT)
+  set.mid:SetAtlas(BAR_MID)
+  local k = h / info.left.height
+  set.left:SetSize(info.left.width * k, h)
+  set.left:SetPoint("LEFT", 0, 0)
+  set.right:SetPoint("RIGHT", 0, 0)
+  set.mid:SetPoint("TOPLEFT", set.left, "TOPRIGHT", 0, 0)
+  set.mid:SetPoint("BOTTOMRIGHT", set.right, "BOTTOMLEFT", 0, 0)
+  -- sign "+" / "-" or nil (no folding: the left end mirrored); gives the width of the right end
+  function set:Set(sign, indent)
+    local i = sign == "+" and self.info.plus or sign == "-" and self.info.minus or nil
+    local t = self.right
+    if i then
+      t:SetAtlas(sign == "+" and BAR_PLUS or BAR_MINUS)
+      t:SetSize(i.width * (self.h / i.height), self.h)
+    else
+      local l = self.info.left
+      t:SetAtlas(BAR_LEFT)
+      if l.leftTexCoord and l.rightTexCoord and l.topTexCoord and l.bottomTexCoord then
+        t:SetTexCoord(l.rightTexCoord, l.leftTexCoord, l.topTexCoord, l.bottomTexCoord)
+      end
+      t:SetSize(l.width * (self.h / l.height), self.h)
+    end
+    self.left:ClearAllPoints()
+    self.left:SetPoint("LEFT", indent or 0, 0)
+    return i and i.width * (self.h / i.height) or 0
+  end
+  function set:SetShown(on)
+    for _, t in ipairs({ self.left, self.right, self.mid }) do if on then t:Show() else t:Hide() end end
+  end
+  return set
+end
+
 function K.GroupHeader(parent)
   local r = RowSkin(Kit.GroupHeader(parent))
   BlizzFonts(r, { text = "GameFontNormal", count = "GameFontHighlightSmall" })
   r.count:SetTextColor(Col3(GREY))
-  r.band = r:CreateTexture(nil, "BACKGROUND")
-  r.band:SetPoint("TOPLEFT", 0, -1) r.band:SetPoint("BOTTOMRIGHT", 0, 1)
-  r.band:SetColorTexture(1, 0.82, 0, 0.07)
+  local info = BarInfo()
+  if info then
+    local rh = tonumber(r.GetHeight and r:GetHeight()) or 0
+    local h = (rh > 4 and rh - 2 < BAR_H) and rh - 2 or BAR_H
+    r.bar = BarSet(r, info, h, false)
+    r.barHot = BarSet(r, info, h, true)
+    r.barHot:SetShown(false)
+    if r.lineB then r.lineB:Hide() end
+  else
+    r.band = r:CreateTexture(nil, "BACKGROUND")
+    r.band:SetPoint("TOPLEFT", 0, -1) r.band:SetPoint("BOTTOMRIGHT", 0, 1)
+    r.band:SetColorTexture(1, 0.82, 0, 0.07)
+  end
   r.pm = r:CreateTexture(nil, "ARTWORK")
   r.pm:SetSize(14, 14)
   r.pm:SetPoint("LEFT", 6, 0)
@@ -3190,15 +3269,43 @@ function K.GroupHeader(parent)
   r.arrow.SetText = function(fs, t)
     setText(fs, "")
     fs.sign = t
+    if r.bar then r.pm:Hide() return end
     if t == "+" or t == "-" then r.pm:SetTexture(t == "+" and PLUS or MINUS) r.pm:Show() else r.pm:Hide() end
   end
   r.arrow:SetText(r.arrow.sign or "")
+  local lay = r.Layout
+  function r:Layout(w)
+    lay(self, w)
+    if not self.bar then return end
+    local ind = self.item and tonumber(self.item.indent) or 0
+    local cap = (self._cap or 0) > 0 and self._cap or BAR_TEXT_X
+    self.text:ClearAllPoints()
+    self.text:SetPoint("LEFT", BAR_TEXT_X + ind, 0)
+    self.count:ClearAllPoints()
+    self.count:SetPoint("RIGHT", -cap - 2, 0)
+    Kit.Fit(self.text, math.max(20, (tonumber(w) or 0) - BAR_TEXT_X - ind - cap - 2 - Width(self.count) - 8))
+  end
   local base = r.SetItem
   function r:SetItem(it, ...)
+    if self.bar and it then
+      local sign = (not it.static) and (it.collapsed and "+" or "-") or nil
+      local ind = tonumber(it.indent) or 0
+      self._cap = self.bar:Set(sign, ind)
+      self.barHot:Set(sign, ind)
+    end
     base(self, it, ...)
     if it and not it.color then self.text:SetTextColor(1, 0.82, 0) end
   end
-  return Repaint(r, function(self, st) RowLight(self, st, not (self.item and self.item.static)) end)
+  return Repaint(r, function(self, st)
+    local it = self.item
+    if not self.bar then RowLight(self, st, not (it and it.static)) return end
+    self.bg:Hide()
+    local hot = (st == "hover" and not (it and it.static)) or st == "selected" or self._active
+    self.barHot:SetShown(hot and true or false)
+    if it and not it.color then
+      if hot then self.text:SetTextColor(1, 1, 1) else self.text:SetTextColor(1, 0.82, 0) end
+    end
+  end)
 end
 
 -- a chain step under its quest: the chain mark, the title white while it is the current one

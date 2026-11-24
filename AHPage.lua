@@ -970,11 +970,24 @@ function ns.AHPage(parent, UI)
   p.lvMin:SetValue(Level(fl.minLevel)) p.lvMax:SetValue(Level(fl.maxLevel))
   -- middle: results
   p.results = UI.Table(p, { columns = Cols(),
-    onClick = function(it) if it and it.result then ns.AHPick(it.result, tonumber(p.qty:GetText())) p:Fill() end end,
+    onClick = function(it, button) p.ResultClick(it, button) end,
     onSort = function(key)
       if A.sort == key then A.desc = not A.desc else A.sort, A.desc = key, false end
       p:Fill()
     end })
+  function p.ResultClick(it, button)
+      if not (it and it.result) then return end
+      -- (Daniel 24.11.2026: "ich kann bei Kaufen nichts auf eine Einkaufsliste setzen zum Beobachten") right click: on an own list
+      if button == "RightButton" then
+        local items = ns.ListAddItems and it.itemID and ns.ListAddItems("item", it.itemID) or {}
+        if #items == 0 then return end
+        local menu = UI.Menu or Kit.Menu
+        menu(it.title or "Auf Liste", items)
+        p.menuFor, p.menuItems = it, items -- (tests)
+        return
+      end
+      ns.AHPick(it.result, tonumber(p.qty:GetText())) p:Fill()
+  end
   -- the offers of the picked item per price tier; a click on a tier: the amount up to and with that tier
   p.tiers = UI.Table(p, { columns = TIER_COLS,
     onClick = function(it) p:PickTier(it and it.tier) end })
