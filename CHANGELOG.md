@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.46
+- Zwei runde Symbole oben rechts über den Listen: Master Chef und Boosted Disenchanting. Farbig, solange der Bonus eingerechnet ist, sonst grau. Der Tooltip sagt, womit gerechnet wird (Rang und Chance beim Kochen, auch für ungelernte Rezepte; Verzauberer, Buff und Prozent beim Entzaubern).
+
 ## 0.2.45
 - Einkaufsliste: Rechtsklick auf eine Zeile, die du selbst herstellen würdest, bietet "Fertig kaufen statt herstellen". Die Zeile kauft dann das fertige Produkt (Händler oder AH), die Mats darunter fallen weg, und sie nennt, was Herstellen je Stück gekostet hätte. Gilt nur für diesen Einkauf; "Wieder selbst herstellen" stellt vorher zurück.
 

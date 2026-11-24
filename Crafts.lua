@@ -155,7 +155,10 @@ function Cr.ReadLegacy(pause)
             end
             local per = Cr.LEGACY_RANK_PCT[name] or 0
             local from = pct and "Talenttext" or ("Rang x " .. per)
-            all[name] = { rank = rank, max = ns.Num(info.maxRanks), pct = rank > 0 and (pct or rank * per) or 0, from = from }
+            -- (24.11.2026) the talent's own picture for the mark in the window (Cr.Perks)
+            local CS = rawget(_G, "C_Spell")
+            local icon = spell and type(CS) == "table" and CS.GetSpellTexture and ns.Call(CS.GetSpellTexture, spell) or nil
+            all[name] = { rank = rank, max = ns.Num(info.maxRanks), pct = rank > 0 and (pct or rank * per) or 0, from = from, icon = icon }
           end
         end
       end
@@ -184,13 +187,14 @@ local function LegacyNow(pause)
     if Cr.LegacyPct("Bartering") + 1000 * Cr.LegacyPct("Working Overtime") ~= oldBarter and ns.Touch then ns.Touch() end
   end
   local old = ns.db.legacyChef
-  ns.db.legacyChef = { rank = res.rank, pct = res.pct, t = time() }
+  ns.db.legacyChef = { rank = res.rank, pct = res.pct, t = time(), max = res.max, icon = res.icon, who = ns.Me and ns.Me() or nil }
   ns.Fact("legacyChef", ("%s Rang %d%s: %d %% Extra-Ergebnis beim Kochen (%s)%s"):format(Cr.CHEF_NAME, res.rank,
     res.max and ("/" .. res.max) or "", res.pct, res.from, why and (", " .. why) or ""))
   if not (old and old.pct == res.pct) then
     if Cr.ResetMakes then Cr.ResetMakes() end
     if ns.Touch then ns.Touch() end
   end
+  if ns.PerksChanged then ns.PerksChanged() end
 end
 local function LegacyJob()
   ns.Job("Legacy lesen", LegacyNow, function(err) ns.Fact("legacyChef", "Fehler: " .. tostring(err)) end)
@@ -203,6 +207,49 @@ function Cr.BonusPct(r)
   if not (r and r.prof == Cr.COOKING) then return 0 end
   local c = ns.db and ns.db.legacyChef
   return type(c) == "table" and tonumber(c.pct) or 0
+end
+
+-- (Daniel 24.11.2026, Bilder Berufe > Cooking und Master Chef 5/5: "einen kreis mit master chef drin, wenn er erkannt
+-- ist? ansonsten ausgegraut? mit tooltip", "das gleiche, wenn erkannt ist, dass der charakter verzauberer ist" und
+-- Boosted Disenchanting) what the two marks over the lists say: { key, on, icon, title, lines } each. Nothing new is
+-- read here: Master Chef as last read from the Legacy tree, the buff as Disenchant.lua sees it on the character.
+Cr.CHEF_ICON, Cr.DE_ICON, Cr.ENCHANTING = "Interface\\Icons\\INV_Misc_Food_15", "Interface\\Icons\\INV_Enchant_Disenchant", 333
+function Cr.Perks()
+  local c = ns.db and ns.db.legacyChef
+  local read = type(c) == "table"
+  local pct, rank = read and tonumber(c.pct) or 0, read and tonumber(c.rank) or 0
+  local chef = { key = "chef", on = pct > 0, icon = read and c.icon or Cr.CHEF_ICON,
+    title = Cr.CHEF_NAME .. (rank > 0 and (" %d%s"):format(rank, c.max and ("/" .. c.max) or "") or "") }
+  if pct > 0 then
+    chef.lines = { ("Erkannt: jedes Kochrezept ist mit %d %% Chance auf ein Stück mehr gerechnet."):format(pct),
+      "Gilt in allen Listen, auch für Rezepte, die noch kein Char kann.",
+      ("Ab %d Herstellungen eines Rezepts zählt der gemessene Schnitt."):format(YIELD_MIN) }
+  elseif read then
+    chef.lines = { "Nicht geskillt: Kochrezepte sind ohne Extra-Ergebnis gerechnet." }
+  else
+    chef.lines = { "Legacy-Baum noch nicht gelesen: Kochrezepte sind ohne Extra-Ergebnis gerechnet." }
+  end
+  if read and c.who then chef.lines[#chef.lines + 1] = "Gelesen bei " .. (ns.Skill and ns.Skill.Short and ns.Skill.Short(c.who) or tostring(c.who)) .. "." end
+
+  local DE = ns.DE
+  local skill = Cr.MySkill(Cr.ENCHANTING)
+  local opt = ns.Opt("deBuff") ~= false
+  local buff = DE and DE.BuffPct and DE.BuffPct() or 0
+  local CS = rawget(_G, "C_Spell")
+  local icon = DE and type(CS) == "table" and CS.GetSpellTexture and ns.Call(CS.GetSpellTexture, DE.BUFF_SPELL) or nil
+  local de = { key = "de", on = skill ~= nil and buff > 0, icon = icon or Cr.DE_ICON, title = "Boosted Disenchanting", lines = {} }
+  de.lines[1] = skill and ("Verzauberer erkannt (Skill %d)."):format(skill) or "Dieser Char ist kein Verzauberer."
+  if not opt then
+    de.lines[2] = "Die Erkennung des Buffs ist in den Optionen aus."
+  elseif buff > 0 then
+    de.lines[2] = ("Buff läuft: Entzauberwerte sind mit %d %% mehr Mats gerechnet."):format(buff)
+  else
+    de.lines[2] = "Buff läuft nicht: Entzauberwerte sind ohne Bonus gerechnet."
+    de.lines[3] = "Kommt beim Arcane Salvager ab Verzauberkunst 225."
+  end
+  local hand = tonumber(ns.Opt("deBonus")) or 0
+  if hand > 0 then de.lines[#de.lines + 1] = ("Von Hand eingestellt: %d %% (der größere Wert zählt)."):format(hand) end
+  return { chef, de }
 end
 
 -- (same) what a recipe really gives, also one of fixed count: the products created (the game's "You create" lines, any

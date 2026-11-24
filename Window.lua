@@ -1655,7 +1655,14 @@ local function Place()
     { W.favCraft, W.favCraft.w, tab == "crates" },
     { W.listEdit, 90, LISTKEY[tab] ~= nil },
     { W.ahBlizz, 110, ahBtn },
+    -- one row only (the kit's look, Kaufen, Verkaufen): the marks stand left of the controls
+    { W.perks, W.perks.w, not two },
   }, { y = cy })
+  W.perks:Update()
+  if two then
+    W.perks:Show() W.perks:ClearAllPoints()
+    W.perks:SetPoint("TOPRIGHT", W.listPage, "TOPRIGHT", -S.pad, -4)
+  end
   -- the secure bag button hangs on UIParent, only anchored to the window: a protected child would make the Kit window
   -- itself protected (no closing or opening in combat); in combat it is left as it is
   local deb = ns.DE.Button(UIParent)
@@ -1667,7 +1674,7 @@ local function Place()
     end
     rx = rx + 240 + S.gap
   elseif not ns.Call(InCombatLockdown) then deb:Hide() end
-  W.chips:Layout(max(120, w - (two and S.pad or rx) - S.pad - (W.atticX or 0)))
+  W.chips:Layout(max(120, w - (two and (S.pad + W.perks.w + S.gap) or rx) - S.pad - (W.atticX or 0)))
   -- (Daniel 20.11.2026) Kaufen has its own page (AHPage.lua): categories, search, results, the purchase
   if W.ahPage then W.ahPage:SetShown(tab == "ah") end
   if tab == "ah" and W.ahPage then
@@ -2049,6 +2056,35 @@ local function BuildWith()
       end
       ns.Refresh()
     end, tooltip = "Lohnende Menge", tooltipLines = { "Setzt die Anzahl auf die Crafts, bis zu denen der Gewinn noch steigt." } })
+  -- (Daniel 24.11.2026: "einen kreis mit master chef drin, wenn er erkannt ist? ansonsten ausgegraut? mit tooltip", the
+  -- same for Boosted Disenchanting) two round marks at the right end of the first row (Kit.RoundIcon), lit while the
+  -- bonus counts, grey without; what they say comes from Crafts.lua Cr.Perks
+  W.perks = CreateFrame("Frame", nil, lp)
+  W.perks.size, W.perks.icons = 30, {}
+  for i = 1, 2 do
+    local ic = UI.RoundIcon(W.perks, W.perks.size)
+    ic:SetPoint("LEFT", W.perks, "LEFT", (i - 1) * (W.perks.size + 2), 0)
+    ns.Call(ic.EnableMouse, ic, true)
+    ic:SetScript("OnEnter", function(self)
+      local p = self.perk
+      if p then UI.Tooltip(self, { text = p.title, icon = p.icon, badge = p.on and "aktiv" or "aus" }, p.lines) end
+    end)
+    ic:SetScript("OnLeave", function(self) UI.HideTooltip(self) end)
+    W.perks.icons[i] = ic
+  end
+  W.perks.w = 2 * W.perks.size + 2
+  W.perks:SetSize(W.perks.w, W.perks.size)
+  function W.perks:Update()
+    for i, p in ipairs(ns.Crafts.Perks()) do
+      local ic = self.icons[i]
+      if ic then
+        ic.perk = p
+        ic:SetIcon(p.icon)
+        if ic.icon.SetDesaturated then ic.icon:SetDesaturated(not p.on) end
+        ic:SetAlpha(p.on and 1 or 0.45)
+      end
+    end
+  end
   W.table = UI.Table(lp, { onClick = function(it, button) OnRowClick(it, button) end,
     -- (Daniel 18.11.2026) a zone of the writs folded with + / -, kept for the next look
     onToggle = function(it) ns.WindowToggle(it) end,
@@ -2385,6 +2421,10 @@ ns.OnInit(BlizzPage)
 -- tab: optional tab key of the window ("main")
 function ns.OpenOptions(tab)
   if Opt and Opt.Open("Profitdon", tab) then return true end
+end
+-- (24.11.2026) the Legacy tree was read: the marks over the lists say the new state (only while the window is up)
+function ns.PerksChanged()
+  if W and W.built and W.perks and W:IsShown() then W.perks:Update() end
 end
 -- (08.11.2026) the lists in slices (Scan.lua ComputeLater), not 268000 auctions in one frame
 function ns.OptionChanged()
