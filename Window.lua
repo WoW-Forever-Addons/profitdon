@@ -242,10 +242,14 @@ local function Row(id, sub, cells, entry, tip, extra)
 end
 -- (24.11.2026) a row of a craft list is built once for its recipe's value (v, new with every new reckoning, Crafts.lua
 -- Cr.RowsSoon) and taken again at the next redraw; only "chosen" is set anew. An item name still missing builds it again.
+-- (24.11.2026, Runde 5: the redraw after a new list took 16.5 ms on the laptop, every row built at once) rowPause: set
+-- while the job "Fenster Zeilen" (ns.RowsDone) builds the rows ahead, a slice may end before each row built
+local rowPause
 local function KeptRow(v, key, build)
   local kept = v._rows
   local it = kept and kept[key]
   if it then return it end
+  if rowPause then rowPause() end
   local miss0 = ns.infoMiss
   it = build()
   if ns.infoMiss == miss0 then
@@ -2029,7 +2033,20 @@ ns.OnInit(function()
 end)
 -- (24.11.2026, Ruckler) a craft list worked out as a job (Crafts.lua Cr.RowsSoon) is drawn once it is done, when the
 -- character is idle (as every redraw of the game's events), right away otherwise
-function ns.RowsDone() if W and W:IsShown() then ns.WhenIdle("Hauptfenster", ns.Refresh, 0.05) end end
+-- (24.11.2026, Runde 5) the rows of a new craft list are built first as a job of their own (KeptRow, a slice may end
+-- before each row), the redraw then takes them; no pause inside a pcall: Rows() calls KeptRow straight from its loops.
+-- With the window shut too (the list worked out ahead, ns.WindowPrewarm): its first opening then draws kept rows.
+function ns.RowsDone()
+  local shown = W and W:IsShown()
+  if not (CRAFT_MODE[tab] or PROF_MODE[tab]) then if shown then ns.WhenIdle("Hauptfenster", ns.Refresh, 0.05) end return end
+  ns.Job("Fenster Zeilen", function(pause)
+    local function p() rowPause = nil pause() rowPause = p end
+    rowPause = p
+    Rows()
+    rowPause = nil
+    if W and W:IsShown() then ns.WhenIdle("Hauptfenster", ns.Refresh, 0.05) end
+  end, function() rowPause = nil end)
+end
 -- (24.11.2026, Laptop: the first opening on Herstellen 2603 ms) the list the window opens on is worked out after the
 -- login in the background (slices of 4 ms), the first opening shows it at once (a newer one follows as a job)
 function ns.WindowPrewarm()

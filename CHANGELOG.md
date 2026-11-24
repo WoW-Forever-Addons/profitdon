@@ -1,5 +1,11 @@
 # Profitdon
 
+## 0.2.31
+- Weniger Ruckler: die Rechnung "lohnt bis" und "Platz für" jedes Rezepts macht im Hintergrund nach jedem Schritt Pause, kein Schritt der Rezeptlisten dauert länger als ein paar Millisekunden.
+- Die Liste "Für Händler" wird nicht mehr nach jedem Looten und jede Minute neu gerechnet, sondern nur, wenn sich Mats, Platz in den Taschen, Preise oder Rezepte ändern.
+- "Platz für" sucht ab dem letzten Ergebnis und ist dadurch viel schneller; die Zeilen einer neuen Liste werden vorab in kleinen Schritten gebaut, das Neuzeichnen und das erste Öffnen des Fensters gehen schneller.
+- /profit set rechnet die Listen gleich neu.
+
 ## 0.2.30
 - Einkaufsliste: Preiswecker je Gegenstand einer eigenen Liste (Rechtsklick auf den Eintrag, "Preiswecker stellen ..."). Sieht Profitdon den Gegenstand im AH zu diesem Preis oder billiger (Vollscan, Berufsscan, "Live prüfen" und jede Suche der Liste), steht eine Zeile im Chat. Die Zeile der Liste zeigt den Wecker, grün wenn erreicht. Gemeldet wird einmal, erneut erst, wenn der Preis zwischendurch darüber lag.
 

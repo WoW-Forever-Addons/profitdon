@@ -413,7 +413,7 @@ function Cr.YieldText(r)
   if r and r.min then return r.min .. "-" .. c end
   return tostring(c)
 end
-function Cr.Forget() parsed = {} Cr.ResetMakes() end
+function Cr.Forget() parsed = {} Cr.ResetMakes() if Cr.CraftItemsForget then Cr.CraftItemsForget() end end
 
 ---------------------------------------------------------------------------
 -- Reading the character
@@ -621,7 +621,7 @@ local function ReadWindow(pause)
   end
   if type(info) == "table" and ns.Num(info.skillLevel) then c.skills[prof] = { ns.Num(info.skillLevel), ns.Num(info.maxSkillLevel) or 0 } end
   c.t = time()
-  if changed then Cr.ResetMakes() end
+  if changed then Cr.ResetMakes() Cr.CraftItemsForget() end
   if full or changed then
     ns.Touch()
     if ns.RefreshSoon then ns.RefreshSoon() elseif ns.Refresh then ns.Refresh() end
@@ -654,8 +654,30 @@ end
 ---------------------------------------------------------------------------
 -- Prices of reagents
 ---------------------------------------------------------------------------
-local makes
+local makes, craftItems
 function Cr.ResetMakes() makes = nil end
+-- (24.11.2026, Runde 5) every item a recipe makes or takes (the data's and the learned ones): what of the bags the craft
+-- lists can depend on (MemoKey, Cr.BagSig). Read once after the login as a job ("Rezeptdaten", pause between recipes:
+-- the first reading of all recipes took some ms), anew when the recipes change (Cr.CraftItemsForget).
+function Cr.CraftItems(pause)
+  if craftItems then return craftItems end
+  local out, spells = {}, {}
+  for spell in pairs(ns.CRAFTS or {}) do spells[#spells + 1] = spell end
+  for spell in pairs(type(ns.db.craftExtra) == "table" and ns.db.craftExtra or {}) do spells[#spells + 1] = spell end
+  for i, spell in ipairs(spells) do
+    if pause and i % 50 == 0 then pause() end
+    local r = Cr.Recipe(spell)
+    if r then
+      if r.item and r.item > 0 then out[r.item] = true end
+      for _, g in ipairs(r.reag or {}) do out[g[1]] = true end
+    end
+  end
+  if craftItems then return craftItems end -- worked out meanwhile by another caller
+  craftItems = out
+  return out
+end
+function Cr.CraftItemsForget() craftItems = nil end
+ns.On("PLAYER_LOGIN", function() ns.After(2, function() ns.Job("Rezeptdaten", function(pause) Cr.CraftItems(pause) end) end) end)
 function Cr.MakesItem(id)
   if not makes then
     makes = {}
@@ -957,11 +979,35 @@ function Cr.Rows(mode) return RowsWork(mode) end
 -- is kept on its own (Herstellen and Für Auktionshaus took each other's place), and the window asks with Cr.RowsSoon /
 -- Cr.ProfRowsSoon: a list not kept for this key is worked out as a job (ns.Job, slices of 4 ms, a recipe at a time)
 -- while the window shows the last one (or a note), and is drawn again once it is done.
+-- (24.11.2026, Runde 5, laptop: "Liste Rows|vendor" 485 slices in 100 s after the login) the key had the data version
+-- (every BAG_UPDATE_DELAYED, a loot, a purchase, a craft) and the minute: the whole list was worked out anew after each
+-- loot and once a minute, though no number of it depends on the clock. Now: ns.coreVer (all changes but the bags'), the
+-- bags as far as a list reads them (Cr.BagSig: free slots and the counts of the items recipes make or take), the live
+-- offers still valid (they end after P.LIVE_AGE, Cr.LiveEdge) and the hour (demand rates per day, Gold/h of 3 days).
 local memo = {}
+local sigVer, sigKept
+function Cr.BagSig()
+  if not ns.bagCacheOff and sigKept and sigVer == ns.dataVer then return sigKept end
+  local items, bags = Cr.CraftItems(), ns.Bags()
+  local freeN, normal = ns.NormalBags()
+  local ids = {}
+  for id in pairs(bags) do if items[id] then ids[#ids + 1] = id end end
+  table.sort(ids)
+  local parts = { ns.FreeSlots(), freeN }
+  for _, id in ipairs(ids) do parts[#parts + 1] = id .. ":" .. bags[id] .. ":" .. (normal[id] and normal[id][2] or 0) end
+  sigKept, sigVer = table.concat(parts, ","), ns.dataVer
+  return sigKept
+end
+-- counted at the whole minute: a profession scan's searches run out one by one, the list follows once a minute at most
+function Cr.LiveEdge()
+  local n, now, age = 0, math.floor(time() / 60) * 60, ns.Prices.LIVE_AGE or 900
+  for _, b in pairs(ns.liveBook or {}) do if type(b) == "table" and now - (b.t or 0) <= age then n = n + 1 end end
+  return n
+end
 local function MemoKey(a1, a2)
   local st = ns.Prices.Store()
-  return table.concat({ tostring(a1), tostring(a2), st and st.t or 0, ns.liveVer or 0, ns.dataVer or 0,
-    ns.db.craftAll and 1 or 0, math.floor(time() / 60), tostring(Cr.assumeChar) }, "|")
+  return table.concat({ tostring(a1), tostring(a2), st and st.t or 0, ns.Prices.ver or 0, ns.liveVer or 0, ns.coreVer or 0,
+    ns.db.craftAll and 1 or 0, Cr.LiveEdge(), math.floor(time() / 3600), tostring(Cr.assumeChar), Cr.BagSig() }, "|")
 end
 local function Memo(name, f)
   return function(a1, a2)
@@ -1080,17 +1126,25 @@ end
 -- (they are used up) must take every mat of the list at the start (a made step turns its mats into it, about the same
 -- room) and the results at the end (the average yield). Returns n, and the names whose stack size the game has not said
 -- yet (counted as 20, 1 for the result) or nil. Kept 5 s.
+-- (24.11.2026, Runde 5: up to 15 ms in one slice on the laptop) pause: inside a job a slice may end before each look at a
+-- count (each is a shopping list). The search starts at the last answer for the recipe (the bags changed a little: two
+-- or three looks instead of 20); kept while the key holds (the bags as Cr.BagSig reads them, prices, recipes) up to 60 s,
+-- 5 s while a stack size is unsure (and in the tests, their bags change without events).
 local roomCache = {}
-function Cr.RoomCrafts(r)
+function Cr.RoomForget() roomCache = {} end -- (tests)
+function Cr.RoomCrafts(r, pause)
   if not r then return nil end
   local free = ns.FreeSlots()
   local bags = ns.Bags()
-  local sig = { r.spell, free }
+  local st0 = ns.Prices.Store()
+  local sig = { r.spell, free, (ns.NormalBags()), ns.coreVer or 0, Cr.BagSig(), ns.Prices.ver or 0, ns.liveVer or 0, st0 and st0.t or 0,
+    ns.db.shopNoHave and 1 or 0, tostring(Cr.assume), tostring(Cr.assumeChar) }
   for _, g in ipairs(r.reag) do sig[#sig + 1] = bags[g[1]] or 0 end
   sig[#sig + 1] = bags[r.item] or 0
   local key = table.concat(sig, "|")
   local c = roomCache[r.spell]
-  if c and c.key == key and GetTime() - c.at < 5 then return c.n, c.unsure end
+  if c and c.key == key and GetTime() - c.at < ((c.unsure or ns.bagCacheOff) and 5 or 60) then return c.n, c.unsure end
+  local guess = c and c.n
   local unsure, named = {}, {}
   local function St(id, dflt)
     local s = ns.Stack(id)
@@ -1116,6 +1170,8 @@ function Cr.RoomCrafts(r)
   local haveR = bags[r.item] or 0
   local avg = Cr.Avg(r)
   local function fits(n)
+    if pause then pause() end
+    Cr.roomLooks = (Cr.roomLooks or 0) + 1 -- (tests, bench)
     local start, startN = 0, 0
     for _, e in ipairs(Cr.ShoppingList({ { r = r, runs = n } })) do
       if not e.alt and not e.head then
@@ -1132,8 +1188,30 @@ function Cr.RoomCrafts(r)
     -- still be free: one for the first results, one of air (MaxCraft); the mats free theirs only as they run out
     return start + 2 <= room and startN + 1 <= roomN and finish <= roomN
   end
+  if not guess then
+    -- the first look: about as many crafts as the slots the mats of one craft take (list1) go into the room
+    local per = 0
+    for _, e in ipairs(list1) do
+      if not e.alt and not e.head and e.src ~= "craft" and e.src ~= "stock" and e.src ~= "mail" then per = per + e.total / St(e.id, 20) end
+    end
+    per = math.max(per, avg / stackR)
+    if per > 0 then guess = math.max(1, math.min(5000, math.floor((room - 2) / per))) end
+  end
   local lo, hi = 0, 1
-  while hi <= 5000 and fits(hi) do lo = hi hi = hi * 2 end
+  if guess and guess >= 1 and guess <= 5000 then
+    -- from the last answer outwards in growing steps (1, 2, 4, ...), then narrowed down as before
+    local step = 1
+    if fits(guess) then
+      lo, hi = guess, guess + 1
+      while hi <= 5000 and fits(hi) do lo = hi step = step * 2 hi = guess + step end
+    else
+      hi, lo = guess, guess - 1
+      while lo >= 1 and not fits(lo) do hi = lo step = step * 2 lo = guess - step end
+      lo = math.max(lo, 0)
+    end
+  else
+    while hi <= 5000 and fits(hi) do lo = hi hi = hi * 2 end
+  end
   hi = math.min(hi, 5001)
   while hi - lo > 1 do
     local m = math.floor((lo + hi) / 2)
@@ -1481,9 +1559,34 @@ end
 -- (Daniel 10.11.2026: "wie viel Gewinn ich mit der Anzahl an crafts bekomme und je craft") the profit of exactly n crafts,
 -- the same reckoning as Breakeven; nil without a value
 -- head: the head row of the grouped list (its sums are those of its own rows, the bags shared with the recipes above it)
+-- (24.11.2026, Runde 5) the profits Cr.Breakeven worked out are kept with it (BeKept): Cr.Run asks for one of its counts
+-- (the best) right after, a shopping list less. Only without a head and with shopNoHave (nothing counts as there, held
+-- and way are false then); else as before.
+local beCache = {}
+local function BeSlot(r, mode)
+  return table.concat({ r.spell, mode or "", ns.db.shopNoHave and 1 or 0, tostring(Cr.assume), tostring(Cr.assumeChar) }, "|")
+end
+-- (24.11.2026, Runde 5: the list "Für Händler" worked every break-even out anew after a loot) with shopNoHave the
+-- shopping list reads no bags (ns.Owned is empty, the mail does not count, Market's Have the same): ns.coreVer then,
+-- the bags' own changes leave it; dataVer otherwise
+local function BeKey(r, mode)
+  local st = ns.Prices.Store()
+  return table.concat({ r.spell, mode or "", st and st.t or 0, ns.Prices.ver or 0, ns.liveVer or 0, ns.db.shopNoHave and 1 or 0,
+    ns.db.shopNoHave and ("c" .. (ns.coreVer or 0)) or (ns.dataVer or 0), tostring(Cr.assume), tostring(Cr.assumeChar) }, "|")
+end
+local function BeKept(r, mode)
+  local c = beCache[BeSlot(r, mode)]
+  -- (16.11.2026) kept while nothing it is made of changed (dataVer); the tests change the bags without events: 5 s there
+  if c and c.key == BeKey(r, mode) and GetTime() - c.at < (ns.bagCacheOff and 5 or 600) then return c end
+end
 function Cr.ProfitAt(r, mode, n, head)
   local worth = r and n and n > 0 and Cr.CraftWorth(r, mode)
   if not worth then return nil end
+  local kept = head == nil and ns.db.shopNoHave and BeKept(r, mode)
+  if kept and kept.worth == worth and kept.seen[n] ~= nil then
+    if kept.seen[n] == false then return nil end
+    return kept.seen[n], false, false
+  end
   local cost, held, way, _
   if type(head) == "table" and head.tallied then cost, held, way = head.cost, head.held, head.way
   else cost, _, _, held, way = ListCost(r, n) end
@@ -1493,19 +1596,19 @@ function Cr.ProfitAt(r, mode, n, head)
   return Revenue(r, mode, worth)(n) - cost, held, way
 end
 
-local beCache = {}
-function Cr.Breakeven(r, mode)
+-- (24.11.2026, Runde 5: 24 calls avg 10.9, up to 19 ms in one slice on the laptop) pause: inside a job a slice may end
+-- before each count worked out anew (each is a shopping list); nil works it out at once
+function Cr.Breakeven(r, mode, pause)
   local worth = r and Cr.CraftWorth(r, mode)
   if not worth then return nil end
-  local st = ns.Prices.Store()
-  local key = table.concat({ r.spell, mode or "", st and st.t or 0, ns.liveVer or 0, ns.db.shopNoHave and 1 or 0, ns.dataVer or 0, tostring(Cr.assume), tostring(Cr.assumeChar) }, "|")
-  local c = beCache[key]
-  -- (16.11.2026) kept while nothing it is made of changed (dataVer); the tests change the bags without events: 5 s there
-  if c and GetTime() - c.at < (ns.bagCacheOff and 5 or 600) then return c.res end
+  local key = BeKey(r, mode)
+  local c = BeKept(r, mode)
+  if c then return c.res end
   local seen, anyLive, shortAt = {}, false, nil
   local revenue = Revenue(r, mode, worth)
   local function P(n)
     if seen[n] == nil then
+      if pause then pause() end
       local cost, short, live = ListCost(r, n)
       if not cost then seen[n] = false
       else
@@ -1529,7 +1632,7 @@ function Cr.Breakeven(r, mode)
     if shortAt then break end
     if bv and v < 0 and bv > 0 and i > bi + 3 then break end
   end
-  if not bi then beCache[key] = { at = GetTime(), res = nil } return nil end
+  if not bi then beCache[BeSlot(r, mode)] = { key = key, at = GetTime(), res = nil, seen = seen, worth = worth } return nil end
   local lo, hi = grid[math.max(1, bi - 1)], grid[math.min(#grid, bi + 1)]
   while hi - lo > 2 do
     local m1 = lo + math.floor((hi - lo) / 3)
@@ -1562,7 +1665,7 @@ function Cr.Breakeven(r, mode)
     end
   end
   local res = { best = gain > 0 and best or 0, gain = gain, zero = zero, short = shortAt, src = anyLive and "live" or "scan", worth = worth }
-  beCache[key] = { at = GetTime(), res = res }
+  beCache[BeSlot(r, mode)] = { key = key, at = GetTime(), res = res, seen = seen, worth = worth }
   return res
 end
 
@@ -1613,14 +1716,15 @@ end
 -- (24.11.2026) pause: inside a job a slice may end before each run (up to 38 ms a recipe on the laptop)
 function Cr.RunsOf(v, pause)
   if pause then
-    -- the two dear parts of a run each in a slice of its own: they are kept (room 5 s, break-even per data version)
-    -- and Cr.Run takes them from there (the same flag shopNoHave as Cr.Run gives each)
+    -- the two dear parts of a run worked out first: they are kept (room, break-even) and Cr.Run takes them from there
+    -- (the same flag shopNoHave as Cr.Run gives each). (24.11.2026, Runde 5) each pauses inside too (ns.TryPaused, no
+    -- pcall around a pause); the flag is put back while others run between the slices
     pause()
-    ns.Try(Cr.RoomCrafts, v.r)
-    pause()
+    ns.TryPaused(pause, function(p) return Cr.RoomCrafts(v.r, p) end)
     local keep = ns.db.shopNoHave
-    ns.db.shopNoHave = true
-    ns.Try(Cr.Breakeven, v.r, "vendor")
+    local function p2() ns.db.shopNoHave = keep pause() ns.db.shopNoHave = true end
+    p2()
+    ns.TryPaused(p2, function(p) return Cr.Breakeven(v.r, "vendor", p) end)
     ns.db.shopNoHave = keep
     pause()
   end

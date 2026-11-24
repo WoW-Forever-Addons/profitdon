@@ -216,6 +216,22 @@ function ns.Try(fn, ...)
   end
   return ok, err
 end
+-- (24.11.2026, Runde 5: `Cr.Breakeven` up to 19 ms, `Cr.RoomCrafts` 15 ms in one slice of a job) ns.Try for a job's work
+-- that pauses inside: fn(p) runs in a coroutine of its own (coroutine.resume catches its errors as pcall would, and a
+-- yield there crosses no pcall, tools/yieldcheck.lua); each p() of fn hands over to pause, the job's, which ends the slice
+-- when it is used up. Without pause it is ns.Try(fn) and p is nil. Returns ok, the first value or the error.
+function ns.TryPaused(pause, fn)
+  if not pause then return ns.Try(fn) end
+  local co = coroutine.create(fn)
+  local function p() coroutine.yield() end
+  local ok, res = coroutine.resume(co, p)
+  while ok and coroutine.status(co) == "suspended" do
+    pause()
+    ok, res = coroutine.resume(co)
+  end
+  if not ok then ns.Try(error, res, 0) end
+  return ok, res
+end
 
 local function pass(ok, ...) if ok then return ... end end
 function ns.Call(f, ...)
@@ -274,7 +290,7 @@ function ns.ItemInfo(id)
   if id and not ns.itemCacheOff and not issecret(name) then infoCache[id] = { name, link, quality, icon, sell, stack, class, level } end
   return name, link, quality, icon, sell, stack, class, level
 end
-function ns.ItemInfoForget() infoCache = {} end -- (tests)
+function ns.ItemInfoForget() infoCache = {} if ns.FitsReagentForget then ns.FitsReagentForget() end end -- (tests)
 
 -- class (2 weapon, 4 armour) and equipment slot without loading the item
 function ns.ItemClass(id)
@@ -513,8 +529,13 @@ function ns.JobsLeft() local n = 0 for _, j in ipairs(jobList) do if not j.dead 
 ns.On("PLAYER_LOGOUT", function() ns.JobsFinish() end)
 
 ns.dataVer = 0
-function ns.Touch() ns.dataVer = ns.dataVer + 1 end
-ns.On("BAG_UPDATE_DELAYED", ns.Touch)
+-- (24.11.2026, Runde 5: the list "Für Händler" was worked out anew after every loot) ns.coreVer counts the same changes
+-- but those of the bags alone (BAG_UPDATE_DELAYED, ns.TouchBags): what does not read the bags (the break-even with
+-- shopNoHave) or checks the bags it reads itself (Crafts.lua MemoKey, Cr.BagSig) keeps its work over a loot
+ns.coreVer = 0
+function ns.Touch() ns.dataVer = ns.dataVer + 1 ns.coreVer = ns.coreVer + 1 end
+function ns.TouchBags() ns.dataVer = ns.dataVer + 1 end
+ns.On("BAG_UPDATE_DELAYED", ns.TouchBags)
 ns.On("PLAYERBANKSLOTS_CHANGED", ns.Touch)
 ns.On("BANKFRAME_CLOSED", ns.Touch)
 
@@ -664,10 +685,19 @@ end
 -- (Daniel 16.11.2026, Bilder: "Platz für 620 Crafts", beim Händler passten nur 480 Hot Spices: "reagenzienbag i guess")
 -- the free slots of the reagent bag only take what the game calls a crafting reagent (GetItemInfo's 17th value); Hot
 -- Spices from the vendor are none. Only a clear yes counts: without it the item needs a normal slot.
+-- (24.11.2026, Runde 5: Cr.RoomCrafts asked it for every row of every shopping list it tried) kept for the session once
+-- the game has the item (as ns.ItemInfo); ns.itemCacheOff (the tests) asks always
+local reagKept = {}
+local function NameAnd17(...) return (...), select(17, ...) end
 function ns.FitsReagentBag(id)
+  if id and not ns.itemCacheOff and reagKept[id] ~= nil then return reagKept[id] end
   local GI = (C_Item and C_Item.GetItemInfo) or GetItemInfo
-  return select(17, ns.Call(GI, id)) == true
+  local name, flag = NameAnd17(ns.Call(GI, id))
+  local v = flag == true
+  if name and id and not ns.itemCacheOff then reagKept[id] = v end
+  return v
 end
+function ns.FitsReagentForget() reagKept = {} end -- (tests)
 -- free slots: of the normal bags, of the reagent bag
 function ns.FreeSplit()
   local n = 0
@@ -735,7 +765,8 @@ SlashCmdList.PROFITDON = function(msg)
   elseif cmd == "set" then
     local key
     for k in pairs(DEFAULTS) do if k:lower() == a then key = k end end
-    if key and SetOpt(key, b) then ns.Print(key .. " = " .. tostring(o[key])) else ns.Print("Unbekannt oder ungültig: " .. a) end
+    -- (24.11.2026, Runde 5) the kept lists are worked out anew (they took the minute in their key before)
+    if key and SetOpt(key, b) then ns.Print(key .. " = " .. tostring(o[key])) if ns.OptionChanged then ns.OptionChanged() else ns.Touch() end else ns.Print("Unbekannt oder ungültig: " .. a) end
   elseif cmd == "start" and ns.Report then
     local c = ns.ParseStart((msg or ""):match("^%s*%S+%s+(.+)$") or "")
     if c and ns.Report.SetStart(c) then ns.Print("Startkapital: " .. ns.Money(c)) else ns.Print("/profit start <Betrag>, z. B. /profit start 1g 6s") end
