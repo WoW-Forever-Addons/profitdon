@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.42
+- Kaufen: die Preisliste zeigt deine eigenen Auktionen bei ihrem Preis ("dazu 20 von dir", oder "nur du: 4 Stück", wenn nur du zu dem Preis anbietest). Sie zählen nicht als Angebot zum Kaufen.
+
 ## 0.2.41
 - Einkaufsliste: ein einzelnes Stück, das mehr kostet als der Höchstbetrag je Klick (z. B. eine Waffe für 355g), ließ sich nicht kaufen ("Teurer als der Höchstbetrag je Klick"). Jetzt geht ein Stück je Klick, solange das Gold reicht, mit dem zweiten Bestätigungsklick.
 

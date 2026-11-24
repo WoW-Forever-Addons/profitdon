@@ -476,6 +476,7 @@ function ns.AHUnpick()
   local B = ns.BuyState
   if B and B.kind == "ah" then
     B.entry, B.plan, B.ladder, B.itemOffers, B.maxQty, B.msg, B.armed = nil, nil, nil, nil, nil, nil, nil
+    B.ownOffers = nil
     B.state = "idle"
   end
 end
@@ -807,6 +808,17 @@ function ns.AHTiers()
       end
     end
   end
+  -- (Daniel 24.11.2026, Bild Kaufen Raptor Egg: "meine eigenen auktionen fehlen mir irgendwie noch") the player's own
+  -- auctions: t.own units at that price; a price only the player offers at is a tier of its own with nothing to buy
+  if B.ownOffers and (B.ladder or B.itemOffers) then
+    local at = {}
+    for _, t in ipairs(raw) do at[t.price] = t end
+    for price, n in pairs(B.ownOffers) do
+      local t = at[price]
+      if not t then t = { price = price, qty = 0 } raw[#raw + 1] = t end
+      t.own = n
+    end
+  end
   table.sort(raw, function(a, b) return a.price < b.price end)
   local want = tonumber(B.want or e.want) or 0
   local med = ns.History and ns.History.Median(e.id)
@@ -838,9 +850,11 @@ local function TierItems()
     if t.state == "part" then sub[#sub + 1] = ("%d von %d"):format(t.take, t.qty) end
     if t.median then sub[#sub + 1] = "Median" end
     if t.over then sub[#sub + 1] = ("über Median +%d %%"):format(t.over) end
+    -- (24.11.2026) the player's own auctions at this price; they are not in the counts (nothing to buy from oneself)
+    if t.own then table.insert(sub, 1, t.qty > 0 and ("dazu %d von dir"):format(t.own) or ("nur du: %d Stück"):format(t.own)) end
     items[#items + 1] = { kind = "trow", title = M(t.price), sub = table.concat(sub, ", "),
-      subColor = t.over and C.red or nil,
-      markColor = t.state == "full" and C.green or t.state == "part" and (C.yellow or C.gold) or nil,
+      subColor = t.over and C.red or t.own and (C.blue or C.goldBright) or nil,
+      markColor = t.state == "full" and C.green or t.state == "part" and (C.yellow or C.gold) or t.own and (C.blue or C.goldBright) or nil,
       active = t.state ~= nil or nil,
       cells = { qty = tostring(t.qty), cum = tostring(t.cum), sum = t.sum and M(t.sum) or "" }, tier = t }
   end

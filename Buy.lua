@@ -178,11 +178,18 @@ local function PlanCommodity()
   local id = B.id
   local n = ns.Num(ns.Call(ns.AH.GetNumCommoditySearchResults, id)) or 0
   local res = {}
+  -- (Daniel 24.11.2026, Bild Kaufen Raptor Egg: "meine eigenen auktionen fehlen mir irgendwie noch") own[price]: the units
+  -- of the player's own auctions at that price, for the price list of the page Kaufen (B.ownOffers)
+  local own = {}
   for i = 1, math.min(n, 200) do
     local r = ns.Call(ns.AH.GetCommoditySearchResultInfo, id, i)
-    local q = type(r) == "table" and (ns.Num(r.quantity) or 0) - (r.containsOwnerItem and (ns.Num(r.numOwnerItems) or ns.Num(r.quantity) or 0) or 0)
+    local mine = type(r) == "table" and r.containsOwnerItem and (ns.Num(r.numOwnerItems) or ns.Num(r.quantity) or 0) or 0
+    local q = type(r) == "table" and (ns.Num(r.quantity) or 0) - mine
     if q and q > 0 then res[#res + 1] = { unitPrice = ns.Num(r.unitPrice), quantity = q } end
+    local p = mine > 0 and ns.Num(r.unitPrice)
+    if p then own[p] = (own[p] or 0) + mine end
   end
+  B.ownOffers = B.kind == "ah" and next(own) and own or nil
   local maxUnit = MaxUnit(B.kind, id, B.entry)
   if not maxUnit or B.kind == "de" then B.plan, B.msg = nil, "Keine Stapelware." return end
   local spend, byMoney = SpendOne(res[1] and res[1].unitPrice)
@@ -271,12 +278,15 @@ local function PlanItem()
   end
   local spend, byMoney = SpendOne(one)
   local best, capped, low
-  local ahOffers = {}
+  local ahOffers, ownOffers = {}, {}
   for i = 1, math.min(n, 200) do
     local r = ns.Call(ns.AH.GetItemSearchResultInfo, B.key, i)
     if i == 1 and type(r) == "table" and type(r.itemLink) == "string" and KeyStr(B.key) then ns.keyLinks[KeyStr(B.key)] = r.itemLink end
     local price = type(r) == "table" and not r.containsOwnerItem and ns.Num(r.auctionID) and ns.Num(r.buyoutAmount)
     if price and price > 0 and (not low or price < low) then low = price end
+    -- (24.11.2026) the player's own auctions, for the price list of the page Kaufen
+    local mine = type(r) == "table" and r.containsOwnerItem and ns.Num(r.buyoutAmount)
+    if mine and mine > 0 then ownOffers[mine] = (ownOffers[mine] or 0) + math.max(1, ns.Num(r.quantity) or 1) end
     if price then
       -- (15.11.2026) one auction is one piece at buyoutAmount: r.quantity counts the like offers the game groups into the
       -- row, a click buys one of them
@@ -319,6 +329,7 @@ local function PlanItem()
     end
     B.ladder, B.maxQty, B.avail = nil, can, #ahOffers
     B.itemOffers = ahOffers
+    B.ownOffers = next(ownOffers) and ownOffers or nil
     if not best then B.msg = n == 0 and "Keine Angebote gefunden." or (B.want or 0) < 1 and "Menge eintragen."
       or (byMoney and "Nicht genug Gold." or "Teurer als der Höchstbetrag je Klick.") end
     return
