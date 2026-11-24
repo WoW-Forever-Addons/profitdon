@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.35
+- Tooltip: die Zeilen, die Profitdon in Item-Tooltips schreibt (AH, Median, Entzaubern, Händler, Shift-Details), erscheinen im englischen Client auf Englisch, im deutschen auf Deutsch. Der Rest von Profitdon bleibt deutsch.
+
 ## 0.2.34
 - Optionen öffnen nur noch Profitdons eigenes Fenster; in den Spieloptionen unter AddOns steht nur ein Knopf dorthin. Fensterstil ist die gemeinsame Option der Don-Addons unter "Fenster".
 - Gegenstandsnamen laden von selbst nach, statt "Item 232438" in Skillen, Entzaubern und Händler.

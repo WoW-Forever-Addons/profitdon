@@ -352,23 +352,25 @@ end
 
 -- tooltip lines of a group: one per mat (chance, count, name, value), the source of the rates and the skill
 -- (16.11.2026) id: the item, for TSM's value beside ours
-function DE.TipLines(group, key, id)
+-- (24.11.2026) T: the tooltip's words in the client's language (Tooltip.lua ns.TipWords); without T German as before
+function DE.TipLines(group, key, id, T)
+  T = T or ns.TipDE
   local value, parts, missing, src = DE.Value(group, key)
   local lines = {}
   for _, p in ipairs(parts or {}) do
     local m = p.m
     lines[#lines + 1] = { Pct(m.chance) .. "  " .. Range(m) .. DE.MatName(m.id),
-      p.net and (ns.Money(p.net) .. " je Stück") or "kein Preis" }
+      p.net and T.each:format(ns.Money(p.net)) or T.noPrice }
   end
-  if value then lines[#lines + 1] = { "Erwartet je Entzauberung" .. (missing and " (ohne Mats ohne Preis)" or ""), ns.Money(value) } end
+  if value then lines[#lines + 1] = { T.expect .. (missing and T.noMats or ""), ns.Money(value) } end
   if DE.Bonus() > 1 then
-    lines[#lines + 1] = ("Mit %d %% Bonus auf die Mats gerechnet (%s)."):format(math.floor((DE.Bonus() - 1) * 100 + 0.5),
-      DE.BuffPct() > 0 and "Boosted Disenchanting läuft" or "Option")
+    lines[#lines + 1] = (T.bonus .. "."):format(math.floor((DE.Bonus() - 1) * 100 + 0.5),
+      DE.BuffPct() > 0 and T.boosted or T.option)
   end
-  lines[#lines + 1] = "Raten: " .. (src or "?") .. ". Stufe: etwa Verzauberkunst " .. (DE.Skill(group) or "?") .. " (Faustregel)."
+  lines[#lines + 1] = T.rates:format(ns.TipSrc(T, src) or "?", DE.Skill(group) or "?")
   local tsm, off = DE.TSMCheck(id, group)
   if tsm then
-    lines[#lines + 1] = { (off and "|cffe6b422" or "") .. "TSM sagt (nach Gebühr)" .. (off and ", weicht stark ab|r" or ""), ns.Money(tsm) }
+    lines[#lines + 1] = { (off and "|cffe6b422" or "") .. T.tsm .. (off and (T.tsmOff .. "|r") or ""), ns.Money(tsm) }
   end
   return lines
 end

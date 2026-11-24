@@ -12,6 +12,48 @@ local _, ns = ...
 -- post calls of other addons such as Syndicator's "Inventory"); items without a sell price get the line from the item post call.
 -- No hooks. Switch: option "tooltip".
 ---------------------------------------------------------------------------
+-- (Daniel 24.11.2026, "Nur Tooltip-Zeilen übersetzen") Profitdon is German on purpose, but the lines it writes into every item
+-- tooltip follow the client: German in deDE, English in every other client. A small table, read at each tooltip build.
+local TIP = {
+  deDE = {
+    none = "AH: keine Angebote bekannt", day = "Tag", days = "Tage", notLast = "nicht im letzten Scan",
+    de = "Entzaubern etwa %s", cut = "AH (+%s nach Gebühr)", vend = "Händler (+%s)", vendor = "Händler",
+    net = "AH nach %s %% Gebühr", buy = "Beim Händler kaufbar", limited = " (begrenzt)",
+    each = "%s je Stück", noPrice = "kein Preis", expect = "Erwartet je Entzauberung", noMats = " (ohne Mats ohne Preis)",
+    bonus = "Mit %d %% Bonus auf die Mats gerechnet (%s)", boosted = "Boosted Disenchanting läuft", option = "Option",
+    rates = "Raten: %s. Stufe: etwa Verzauberkunst %s (Faustregel).", tsm = "TSM sagt (nach Gebühr)", tsmOff = ", weicht stark ab",
+    srcNow = "Suche eben", srcScan = "Scan vor %d min", srcOwn = "deine %d Würfe (CMaNGOS-Tabelle passt nicht dazu)",
+    srcMix = "CMaNGOS mit %d eigenen Würfen gemischt (Tabelle zählt wie %d)",
+  },
+  enUS = {
+    none = "AH: no offers known", day = "day", days = "days", notLast = "not in the last scan",
+    de = "Disenchant about %s", cut = "AH (+%s after fee)", vend = "Vendor (+%s)", vendor = "Vendor",
+    net = "AH after %s %% fee", buy = "Buyable from vendor", limited = " (limited)",
+    each = "%s each", noPrice = "no price", expect = "Expected per disenchant", noMats = " (without mats lacking a price)",
+    bonus = "Calculated with %d %% bonus on the mats (%s)", boosted = "Boosted Disenchanting is active", option = "option",
+    rates = "Rates: %s. Level: about Enchanting %s (rule of thumb).", tsm = "TSM says (after fee)", tsmOff = ", differs a lot",
+    srcNow = "just searched", srcScan = "scan %d min ago", srcOwn = "your %d rolls (CMaNGOS table does not fit)",
+    srcMix = "CMaNGOS mixed with %d own rolls (table counts as %d)",
+  },
+}
+ns.TipDE = TIP.deDE
+function ns.TipWords()
+  local f = rawget(_G, "GetLocale")
+  return TIP[f and f() == "deDE" and "deDE" or "enUS"]
+end
+-- a source text of the price or of the rates (made German elsewhere) in the tooltip's language
+function ns.TipSrc(T, src)
+  if type(src) ~= "string" or T == TIP.deDE then return src end
+  if src == "Suche eben" then return T.srcNow end
+  local m = src:match("^Scan vor (%d+) min$")
+  if m then return T.srcScan:format(tonumber(m)) end
+  local a = src:match("^deine (%d+) Würfe")
+  if a then return T.srcOwn:format(tonumber(a)) end
+  local n, k = src:match("^CMaNGOS mit (%d+) eigenen Würfen gemischt %(Tabelle zählt wie (%d+)%)$")
+  if n then return T.srcMix:format(tonumber(n), tonumber(k)) end
+  return src
+end
+
 local function StackCount(tip, id)
   local owner = tip.GetOwner and tip:GetOwner()
   if type(owner) == "table" and owner.GetBagID and owner.GetID then
@@ -55,6 +97,7 @@ end
 
 local function Lines(tip, id)
   if not ns.Opt("tooltip") or (tip ~= GameTooltip and tip ~= ItemRefTooltip) or not id then return end
+  local T = ns.TipWords()
   local P, D = ns.Prices, ns.Deals
   local sell = P.Sell(id)
   local ah, src = ns.AHPrice(id)
@@ -76,7 +119,7 @@ local function Lines(tip, id)
   if not ah and not med then
     local GI = (C_Item and C_Item.GetItemInfo) or GetItemInfo
     local bind = select(14, ns.Call(GI, id))
-    if bind ~= 1 and bind ~= 4 then tip:AddLine("|cff8a8f96AH: keine Angebote bekannt|r") end
+    if bind ~= 1 and bind ~= 4 then tip:AddLine("|cff8a8f96" .. T.none .. "|r") end
     if not de then return end
   end
   local cut = P.Cut()
@@ -93,29 +136,29 @@ local function Lines(tip, id)
   local label = count > 1 and (" (" .. count .. ")") or ""
   if ah then MoneyLine(tip, "AH" .. label .. ":", ah * count) end
   if med then
-    tip:AddLine("|cff8a8f96Median " .. mdays .. (mdays == 1 and " Tag" or " Tage") .. label .. ": " .. ns.Money(med * count, true)
-      .. (tr ~= "" and (" (" .. tr .. ")") or "") .. (ah and "" or ", nicht im letzten Scan") .. "|r")
+    tip:AddLine("|cff8a8f96Median " .. mdays .. " " .. (mdays == 1 and T.day or T.days) .. label .. ": " .. ns.Money(med * count, true)
+      .. (tr ~= "" and (" (" .. tr .. ")") or "") .. (ah and "" or ", " .. T.notLast) .. "|r")
   end
   local net = ah and D.AfterCut(ah, cut)
   -- (Daniel 06.11.2026: "besser im AH weglassen, sondern in grün nur AH und dann in Klammern das, was da steht")
   if de and de > math.max(sell or 0, net or 0) then
-    tip:AddLine(("|cff4fd16bEntzaubern etwa %s|r"):format(ns.Money(de * count)))
+    tip:AddLine(("|cff4fd16b" .. T.de .. "|r"):format(ns.Money(de * count)))
   elseif net and sell and sell > 0 and net > sell then
-    tip:AddLine("|cff4fd16bAH (+" .. ns.Money((net - sell) * count) .. " nach Gebühr)|r")
+    tip:AddLine("|cff4fd16b" .. T.cut:format(ns.Money((net - sell) * count)) .. "|r")
   elseif net and sell and sell > net then
-    tip:AddLine("|cff4fd16bHändler (+" .. ns.Money((sell - net) * count) .. ")|r")
+    tip:AddLine("|cff4fd16b" .. T.vend:format(ns.Money((sell - net) * count)) .. "|r")
   end
   if not shift then return end
   local G = "|cff8a8f96"
-  if sell and sell > 0 then MoneyLine(tip, "Händler" .. label .. ":", sell * count) end
-  if net then tip:AddDoubleLine(G .. "AH nach " .. cut .. " % Gebühr" .. label .. "|r", ns.Money(net * count, true) .. " " .. G .. "(" .. (src or "?") .. ")|r") end
+  if sell and sell > 0 then MoneyLine(tip, T.vendor .. label .. ":", sell * count) end
+  if net then tip:AddDoubleLine(G .. T.net:format(cut) .. label .. "|r", ns.Money(net * count, true) .. " " .. G .. "(" .. (ns.TipSrc(T, src) or "?") .. ")|r") end
   if g then
-    for _, l in ipairs(ns.DE.TipLines(g, nil, id)) do
+    for _, l in ipairs(ns.DE.TipLines(g, nil, id, T)) do
       if type(l) == "table" then tip:AddDoubleLine(G .. l[1] .. "|r", l[2]) else tip:AddLine(G .. l .. "|r") end
     end
   end
   local vp, vs, limited, vname = P.VendorBuy(id)
-  if vp then tip:AddDoubleLine(G .. "Beim Händler kaufbar" .. (limited and " (begrenzt)" or "") .. "|r", ns.Money(vp, true) .. ((vs or 1) > 1 and (" / " .. vs) or "") .. " " .. G .. (vname or "") .. "|r") end
+  if vp then tip:AddDoubleLine(G .. T.buy .. (limited and T.limited or "") .. "|r", ns.Money(vp, true) .. ((vs or 1) > 1 and (" / " .. vs) or "") .. " " .. G .. (vname or "") .. "|r") end
 end
 
 local function ItemOf(tip, data)
