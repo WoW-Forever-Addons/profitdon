@@ -75,12 +75,20 @@ local function Reqs(spell)
   local T = rawget(_G, "C_TradeSkillUI")
   local list = spell and type(T) == "table" and ns.Call(T.GetRecipeRequirements, spell)
   if type(list) ~= "table" or #list == 0 then return nil end
-  local names, met = {}, true
+  -- (Daniel 24.11.2026, Bild Gnomish Universal Remote: "hammer und spanner werden erst weiß, wenn ich am amboss stehe")
+  -- each need in its own colour as the game shows it: the hammer in the bags is white while the anvil is still red.
+  -- Third value: the names with colour codes; fourth: the met flags in a row ("011"), for the poll
+  local names, met, rich, flags = {}, true, {}, {}
   for _, q in ipairs(list) do
-    if type(q) == "table" and q.name then names[#names + 1] = q.name if not q.met then met = false end end
+    if type(q) == "table" and q.name then
+      names[#names + 1] = q.name
+      rich[#rich + 1] = (q.met and "|cffffffff" or "|cffff1a1a") .. q.name .. "|r"
+      flags[#flags + 1] = q.met and "1" or "0"
+      if not q.met then met = false end
+    end
   end
   if #names == 0 then return nil end
-  return table.concat(names, ", "), met
+  return table.concat(names, ", "), met, table.concat(rich, "|cffffffff, |r"), table.concat(flags)
 end
 ns.CraftWinReqs = Reqs -- (tests)
 
@@ -97,13 +105,14 @@ local function Describe(row)
   return a, b, c, d, e
 end
 
--- the line under a recipe with needs: "Braucht Anvil, Blacksmith Hammer", red while unmet, white once met
+-- the line under a recipe with needs: "Braucht Anvil, Blacksmith Hammer", each name red while unmet, white once met;
+-- "Braucht" itself red while one is missing (need), plain: the words without colour codes
 local function NeedRow(row)
   local r = not (row.section or row.note or row.head or row.mat) and row.r
-  local need, met = Reqs(r and r.spell)
+  local need, met, rich = Reqs(r and r.spell)
   if not need then return nil end
-  return { note = true, need = met and "white" or "red", text = "Braucht " .. need, depth = row.depth,
-    pad = row.id and true or nil }
+  return { note = true, need = met and "white" or "red", text = "Braucht " .. rich, plain = "Braucht " .. need,
+    depth = row.depth, pad = row.id and true or nil }
 end
 ns.CraftWinNeedRow = NeedRow -- (tests)
 
@@ -515,10 +524,10 @@ local function ReqSig(rows)
   local sig = {}
   for _, row in ipairs(rows) do
     local r = not (row.section or row.note or row.head or row.mat) and row.r
-    local need, met = Reqs(r and r.spell)
-    if need then sig[#sig + 1] = met and "1" or "0" end
+    local need, _, _, flags = Reqs(r and r.spell)
+    if need then sig[#sig + 1] = flags end
   end
-  return #sig > 0 and table.concat(sig) or nil
+  return #sig > 0 and table.concat(sig, ";") or nil
 end
 -- walking to a fire or away: no event says so; once a second the flags of the rows shown, a redraw when one changed
 local reqPolling

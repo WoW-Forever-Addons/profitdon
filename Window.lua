@@ -1401,7 +1401,7 @@ local function Primary()
       if F.InPlan(id) then
         return buy, { text = "Von der Einkaufsliste nehmen", onClick = function() F.Remove(id) Draw() end }
       end
-      return buy, { text = "Auf die Einkaufsliste", onClick = function() F.Add(id, B.want or 1) ns.SetTab("shop") end }
+      return buy, { text = "Auf die Einkaufsliste", onClick = function() F.Add(id, B.want or 1) Draw() end }
     end
     -- (Daniel 18.11.2026) the chosen writ goes on the shopping list with its ware
     if tab == "writs" and B.entry and B.kind == "writ" then
@@ -1409,7 +1409,7 @@ local function Primary()
       if Wr.InPlan(q) then
         return buy, { text = "Von der Einkaufsliste nehmen", onClick = function() Wr.Remove(q) Draw() end }
       end
-      return buy, { text = "Auf die Einkaufsliste", onClick = function() Wr.Add(q, 1) ns.SetTab("shop") end }
+      return buy, { text = "Auf die Einkaufsliste", onClick = function() Wr.Add(q, 1) Draw() end }
     end
     return buy
   end
@@ -2467,7 +2467,9 @@ function ns.ListAddMenu(kind, key, title, first)
   for _, l in ipairs(SL.Visible()) do
     local there = SL.Find(l.id, kind, key)
     items[#items + 1] = { text = there and ("Auf \"%s\" (schon drauf: öffnen)"):format(l.name) or ("Auf Liste \"%s\""):format(l.name), onClick = function()
-      if not there then SL.Add(l.id, kind, key, 1) end
+      -- (Daniel 24.11.2026: "soll er nicht immer direkt zur liste springen") adding stays on the page; only the
+      -- entry that says "öffnen" goes to the list
+      if not there then SL.Add(l.id, kind, key, 1) ns.SyncListTabs() ns.Refresh() return end
       ns.SyncListTabs()
       ns.SetTab(ListKey(l.id))
     end }
@@ -2478,7 +2480,7 @@ function ns.ListAddMenu(kind, key, title, first)
       if not l then return end
       SL.Add(l.id, kind, key, 1)
       ns.SyncListTabs()
-      ns.SetTab(ListKey(l.id))
+      ns.Refresh()
     end)
   end }
   ShowMenu(title or "Auf Liste", items)

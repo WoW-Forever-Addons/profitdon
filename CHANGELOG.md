@@ -1,5 +1,9 @@
 # Profitdon
 
+## 0.2.44
+- Herstellfenster: die Zeile "Braucht ..." färbt jedes Teil einzeln wie das Spiel. Werkzeug in den Taschen (Hammer, Spanner) ist weiß, auch wenn der Amboss noch fehlt und rot bleibt.
+- "Auf die Einkaufsliste" und "Auf Liste ..." springen nicht mehr zur Liste. Die Seite bleibt, wo du bist; der Menüeintrag "schon drauf: öffnen" zeigt die Liste weiterhin.
+
 ## 0.2.43
 - Neuer Reiter "Auktionen": alle deine Auktionen mit Anzahl, Preis je Stück, billigstem Angebot anderer und Restzeit. Unterbotene stehen rot oben, Verkaufte am Ende. Zeile anklicken, dann "Abbrechen" (zweiter Klick bestätigt, die Gebühr steht dabei). Außerhalb des Auktionshauses zeigt der Reiter den letzten Stand.
 
