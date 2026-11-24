@@ -1951,6 +1951,13 @@ local function BuildWith()
   -- MEDIUM and come up when shown; the Kit's HIGH kept Profitdon above them. MEDIUM and toplevel: whatever was opened or
   -- clicked last is on top, as with the AH window
   ns.Call(W.SetFrameStrata, W, "MEDIUM")
+  -- (Daniel 24.11.2026, Bild Einkaufsliste: "optionen fehlen noch immer") the game's frame art lies on frame level 500
+  -- (NineSlicePanelTemplate) over everything in the title bar; the options button goes up beside the close button
+  -- (level 510 and above), else it stands hidden under the title strip
+  if W.gear and W.gear.SetFrameLevel then
+    local lv = W.close and W.close.GetFrameLevel and tonumber((W.close:GetFrameLevel())) or 0
+    ns.Call(W.gear.SetFrameLevel, W.gear, math.max(lv, 511))
+  end
   W:Hide()
   for _, g in ipairs(GROUPS) do W:AddTab(g[1], g[2]) end
   W.listPage = CreateFrame("Frame", nil, W.body)

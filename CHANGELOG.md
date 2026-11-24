@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.49
+- Der Optionen-Knopf in der Titelleiste war von der Rahmengrafik verdeckt. Er liegt jetzt darüber und ist zu sehen.
+
 ## 0.2.48
 - Optionen-Knopf oben in der Titelleiste, links neben dem Schließen-Kreuz.
 - Klick auf das Symbol Boosted Disenchanting rechnet alle Entzauberwerte so, als liefe der Buff. So siehst du vorher, ob sich der Arcane Salvager lohnt. Noch ein Klick stellt zurück. Deine eigenen Entzauberungen werden weiter nach dem echten Buff mitgeschrieben.
