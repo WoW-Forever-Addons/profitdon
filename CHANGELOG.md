@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.52
+- Verkaufen: Craftsman's Writs (die Auftragsseiten) stehen jetzt in der Liste und lassen sich ins AH einstellen. Bisher fielen sie als Questgegenstände heraus. Andere Questgegenstände bleiben draußen.
+
 ## 0.2.51
 - Gold/30 min und Gold/h unter Herstellen rechnen den Platz jetzt mit aufgeräumten Taschen: Alles zählt als frei bis auf Ruhestein, Berufswerkzeug (Hammer, Spitzhacke, Messer, Ruten, Angel, Arcane Salvager und so weiter) und Gebundenes ohne Händlerpreis. So hängt der Vergleich der Rezepte nicht davon ab, was gerade in den Taschen liegt. Die Einkaufsliste nennt weiter den echten Platz von jetzt.
 
