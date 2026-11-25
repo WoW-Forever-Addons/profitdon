@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.51
+- Gold/30 min und Gold/h unter Herstellen rechnen den Platz jetzt mit aufgeräumten Taschen: Alles zählt als frei bis auf Ruhestein, Berufswerkzeug (Hammer, Spitzhacke, Messer, Ruten, Angel, Arcane Salvager und so weiter) und Gebundenes ohne Händlerpreis. So hängt der Vergleich der Rezepte nicht davon ab, was gerade in den Taschen liegt. Die Einkaufsliste nennt weiter den echten Platz von jetzt.
+
 ## 0.2.50
 - Einkaufsliste: Die Zeile unter dem Rezept nennt jetzt neben dem Platz auch, wie viele Crafts in 30 Minuten passen, bevor das Spiel dich wegen AFK ausloggt (28 Minuten Zauberzeit, Zwischenschritte mitgezählt). Gelb, wenn du mehr eingetragen hast.
 

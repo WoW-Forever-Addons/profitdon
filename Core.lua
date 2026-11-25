@@ -714,6 +714,51 @@ function ns.FreedNormal(items, id, left, stack)
   local stay = math.min(t[1], math.max(0, left))
   return math.max(0, t[2] - math.ceil(stay / math.max(1, stack or 1)))
 end
+-- (Daniel 25.11.2026, Omelet: Gold/30 min counted 260 crafts, the bags held other things: "den maximal freien platz
+-- rechnet, abzüglich der plätze, die der char für berufsgegenstände hat? also blacksmith hammer, arcane dings, ruten, und
+-- evtl der ruhestein"; gewählt "Feste Liste plus Gebundenes", nur Gold/30 min und Gold/h) the bags as if tidied up: every
+-- slot is free but those of what always comes along: the hearthstone, the profession tools (ns.KEEP_ITEMS) and what is
+-- soulbound without a vendor price (quest items and the like).
+ns.KEEP_ITEMS = {
+  [6948] = true, -- Hearthstone
+  [5956] = true, -- Blacksmith Hammer
+  [2901] = true, [756] = true, [778] = true, [1819] = true, [1893] = true, [1959] = true, [9465] = true, [20723] = true, -- mining picks
+  [7005] = true, [12709] = true, [19901] = true, -- skinning knives
+  [6219] = true, [10498] = true, -- Arclight Spanner, Gyromatic Micro-Adjustor
+  [6218] = true, [6339] = true, [11130] = true, [11145] = true, [16207] = true, -- enchanting rods
+  [9149] = true, -- Philosopher's Stone
+  [6256] = true, [6365] = true, [6366] = true, [6367] = true, [12225] = true, [19022] = true, [19970] = true, -- fishing poles
+  [279985] = true, [279987] = true, -- Arcane Salvager, Arcane Forge (Forever)
+}
+function ns.Keeps(id, info)
+  if ns.KEEP_ITEMS[id] then return true end
+  if type(info) == "table" and info.isBound then
+    if info.hasNoValue then return true end
+    local GI = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+    local sell = select(11, ns.Call(GI, id))
+    if sell == 0 then return true end
+  end
+  return false
+end
+-- the free slots of the tidied bags: all bags, the normal bags (0-4)
+local tidySnap, tidyAt
+function ns.TidySlots()
+  if not ns.bagCacheOff and tidySnap and tidyAt == Now() then return tidySnap[1], tidySnap[2] end
+  local all, normal = 0, 0
+  for bag = 0, ns.LASTBAG do
+    local slots = ns.Num(ns.Call(C_Container.GetContainerNumSlots, bag)) or 0
+    local free = slots
+    for slot = 1, slots do
+      local info = ns.Call(C_Container.GetContainerItemInfo, bag, slot)
+      local id = type(info) == "table" and ns.Num(info.itemID)
+      if id and ns.Keeps(id, info) then free = free - 1 end
+    end
+    all = all + free
+    if bag <= 4 then normal = normal + free end
+  end
+  if not ns.bagCacheOff then tidySnap, tidyAt = { all, normal }, Now() end
+  return all, normal
+end
 
 ---------------------------------------------------------------------------
 -- Slash command /profit

@@ -395,6 +395,10 @@ local function CraftTip(v, deMode)
     end
     RunLine(("Lauf %d min"):format(ns.Opt("runMin") or 30), v.run)
     RunLine("Eine Stunde", v.runH)
+    -- (Daniel 25.11.2026) the room of a run is that of the tidied bags: the tip says so
+    if (type(v.run) == "table" and v.run.limit == "Platz") or (type(v.runH) == "table" and v.runH.limit == "Platz") then
+      D({ "Platz: Taschen aufgeräumt gerechnet", "nur Ruhestein, Werkzeug, Gebundenes bleibt" })
+    end
   end
   if v.view and v.knownBy and #v.knownBy > 0 then
     local names = {}

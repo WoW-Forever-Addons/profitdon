@@ -1227,17 +1227,22 @@ end
 -- 5 s while a stack size is unsure (and in the tests, their bags change without events).
 local roomCache = {}
 function Cr.RoomForget() roomCache = {} end -- (tests)
-function Cr.RoomCrafts(r, pause)
+-- (Daniel 25.11.2026) tidy: the bags as if tidied up (ns.TidySlots): nothing held but what always comes along, every mat
+-- bought (the caller sets shopNoHave); for Gold/30 min and Gold/h (Cr.Run), the shopping list keeps the bags as they are
+function Cr.RoomCrafts(r, pause, tidy)
   if not r then return nil end
-  local free = ns.FreeSlots()
-  local bags = ns.Bags()
+  local tidyAll, tidyN
+  if tidy then tidyAll, tidyN = ns.TidySlots() end
+  local free = tidy and tidyAll or ns.FreeSlots()
+  local bags = tidy and {} or ns.Bags()
   local st0 = ns.Prices.Store()
-  local sig = { r.spell, free, (ns.NormalBags()), ns.coreVer or 0, Cr.BagSig(), ns.Prices.ver or 0, ns.liveVer or 0, st0 and st0.t or 0,
+  local sig = { r.spell, free, tidy and ("t" .. tidyN) or (ns.NormalBags()), ns.coreVer or 0, Cr.BagSig(), ns.Prices.ver or 0, ns.liveVer or 0, st0 and st0.t or 0,
     ns.db.shopNoHave and 1 or 0, tostring(Cr.assume), tostring(Cr.assumeChar) }
   for _, g in ipairs(r.reag) do sig[#sig + 1] = bags[g[1]] or 0 end
   sig[#sig + 1] = bags[r.item] or 0
   local key = table.concat(sig, "|")
-  local c = roomCache[r.spell]
+  local slotKey = tidy and (r.spell .. "|tidy") or r.spell
+  local c = roomCache[slotKey]
   if c and c.key == key and GetTime() - c.at < ((c.unsure or ns.bagCacheOff) and 5 or 60) then return c.n, c.unsure end
   local guess = c and c.n
   local unsure, named = {}, {}
@@ -1258,7 +1263,8 @@ function Cr.RoomCrafts(r, pause)
   for id in pairs(ids) do held = held + slots(id, bags[id] or 0, 20) end
   local room = free + held
   -- (12.11.2026) the results only fit the normal bags (not the reagent bag): its free slots and what the mats fill there
-  local freeN, normal = ns.NormalBags()
+  local freeN, normal
+  if tidy then freeN, normal = tidyN, {} else freeN, normal = ns.NormalBags() end
   local roomN = math.max(0, freeN - 1) -- (12.11.2026) one slot of air, as in MaxCraft
   for id in pairs(ids) do roomN = roomN + ns.FreedNormal(normal, id, 0, St(id, 20)) end
   local stackR = St(r.item, 1)
@@ -1313,7 +1319,7 @@ function Cr.RoomCrafts(r, pause)
     if fits(m) then lo = m else hi = m end
   end
   local u = #unsure > 0 and unsure or nil
-  roomCache[r.spell] = { key = key, at = GetTime(), n = lo, unsure = u }
+  roomCache[slotKey] = { key = key, at = GetTime(), n = lo, unsure = u }
   return lo, u
 end
 
@@ -1815,9 +1821,8 @@ function Cr.Run(v, k)
     local caps = {}
     local t = v.time and v.time > 0 and v.time or Cr.CastTime(r.spell)
     if t and t > 0 then caps[#caps + 1] = { math.floor(Cr.RunSec() * k / t), "Zeit" } end
-    ns.db.shopNoHave = keep -- the room is that of the bags as they are
-    local room = Cr.RoomCrafts(r)
-    ns.db.shopNoHave = true
+    -- (Daniel 25.11.2026) the room of the tidied bags (Cr.RoomCrafts tidy), every mat bought
+    local room = Cr.RoomCrafts(r, nil, true)
     if room then caps[#caps + 1] = { math.floor(room * k), "Platz" } end
     local be = Cr.Breakeven(r, "vendor")
     if not be then return nil end
@@ -1840,10 +1845,10 @@ function Cr.RunsOf(v, pause)
     -- the two dear parts of a run worked out first: they are kept (room, break-even) and Cr.Run takes them from there
     -- (the same flag shopNoHave as Cr.Run gives each). (24.11.2026, Runde 5) each pauses inside too (ns.TryPaused, no
     -- pcall around a pause); the flag is put back while others run between the slices
-    pause()
-    ns.TryPaused(pause, function(p) return Cr.RoomCrafts(v.r, p) end)
     local keep = ns.db.shopNoHave
     local function p2() ns.db.shopNoHave = keep pause() ns.db.shopNoHave = true end
+    p2()
+    ns.TryPaused(p2, function(p) return Cr.RoomCrafts(v.r, p, true) end)
     p2()
     ns.TryPaused(p2, function(p) return Cr.Breakeven(v.r, "vendor", p) end)
     ns.db.shopNoHave = keep
