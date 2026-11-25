@@ -734,6 +734,14 @@ local function Rows()
               bits[#bits + 1] = (tight and YEL or "") .. ("Platz für %s%d Crafts"):format(roomUnsure and "~" or "", roomN) .. (tight and ", mehr auf Vorrat (Briefkasten)" or "") .. (tight and "|r" or "")
               if tight then level = math.max(level, 1) end
             end
+            -- (Daniel 25.11.2026: "so viel kannst du innerhalb von 30 minuten herstellen, bevor man afk ausgeloggt wird") the
+            -- crafts of one stretch of casting before the AFK logout (Cr.AFK_SEC, 28 min, the steps on the way counted)
+            local one = not Cr.HasCooldown(en.r.spell) and Cr.Time(en.r)
+            if one and one > 0 then
+              local afkN = math.floor(Cr.AFK_SEC / one)
+              local over = afkN < en.runs
+              bits[#bits + 1] = (over and YEL or "") .. ("in 30 min (AFK) %d Crafts"):format(afkN) .. (over and "|r" or "")
+            end
             local cd = Cr.CooldownText(en.r.spell)
             if cd then
               bits[#bits + 1] = YEL .. cd .. ": nur 1 je Abklingzeit|r"

@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.50
+- Einkaufsliste: Die Zeile unter dem Rezept nennt jetzt neben dem Platz auch, wie viele Crafts in 30 Minuten passen, bevor das Spiel dich wegen AFK ausloggt (28 Minuten Zauberzeit, Zwischenschritte mitgezählt). Gelb, wenn du mehr eingetragen hast.
+
 ## 0.2.49
 - Der Optionen-Knopf in der Titelleiste war von der Rahmengrafik verdeckt. Er liegt jetzt darüber und ist zu sehen.
 
