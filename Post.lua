@@ -123,16 +123,6 @@ function ns.GreyKeep(id, count, sell)
   return profit > 0 and profit >= MinGain(e)
 end
 
--- the writ items of Data/Writs.lua (field 2), built on first use
-local writItems
-local function WritItem(id)
-  if not writItems then
-    writItems = {}
-    for _, w in ipairs(ns.WRITS and ns.WRITS.list or {}) do if w[2] then writItems[w[2]] = true end end
-  end
-  return writItems[id] == true
-end
-
 local function Build()
   local P, D, DE = ns.Prices, ns.Deals, ns.DE
   local cut = P.Cut()
@@ -163,12 +153,11 @@ local function Build()
           local e = byId[id]
           if not e then
             local unit = ns.FreshLow and ns.FreshLow(id) or P.Low(id)
-            local _, _, _, _, _, _, class = ns.ItemInfo(id)
-            -- other ware: only with a price, never quest items or what a vendor sells without limit
-            -- (25.11.2026, Daniel to his writ pages in the bags: "wieso kann ich die seiten nicht verkaufen") Craftsman's
-            -- Writs are quest items the AH trades: they count as ware
+            -- other ware: only with a price, never what a vendor sells without limit
+            -- (25.11.2026, Daniel: "wieso kann ich die seiten nicht verkaufen", the Green Hills of Stranglethorn pages)
+            -- quest items too: the price comes from the AH, so the AH trades them; without a price they stay out
             local other = not want[id]
-            local ok = not other or (unit and (ns.Num(class) ~= 12 or WritItem(id)) and not (P.VendorBuy and P.VendorBuy(id, true)))
+            local ok = not other or (unit and not (P.VendorBuy and P.VendorBuy(id, true)))
             if ok then
               e = { id = id, count = 0, bag = bag, slot = slot, sell = P.Sell(id) or 0, unit = unit, quality = q,
                 made = products[id] and true or nil, other = other or nil }

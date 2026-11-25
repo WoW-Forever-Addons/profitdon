@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.53
+- Verkaufen: Alle Questgegenstände, die im AH gehandelt werden, stehen jetzt in der Liste, zum Beispiel die Seiten der Grünen Hügel des Schlingendorntals. Was keinen AH-Preis hat, bleibt draußen.
+
 ## 0.2.52
 - Verkaufen: Craftsman's Writs (die Auftragsseiten) stehen jetzt in der Liste und lassen sich ins AH einstellen. Bisher fielen sie als Questgegenstände heraus. Andere Questgegenstände bleiben draußen.
 
