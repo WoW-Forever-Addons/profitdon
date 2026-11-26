@@ -630,7 +630,53 @@ local SORTERS = {
   price = function(a, b) return (a.min or math.huge) < (b.min or math.huge) end,
   med = function(a, b) return (a.med or math.huge) < (b.med or math.huge) end,
   trend = function(a, b) return (a.pct or 0) < (b.pct or 0) end,
+  -- (26.11.2026) best upgrade first with the first click (empty slot first, items you cannot wear last)
+  gear = function(a, b) return (a.gear or -1e9) > (b.gear or -1e9) end,
 }
+
+---------------------------------------------------------------------------
+-- (26.11.2026, Daniel: im AH "mit einem Blick, wie viel Prozent das Item denn besser ist als das jetzige getragene ...
+-- welche Brustplatte im AH die meisten Prozente hat"; gewählt "Prozent plus Pfeil" und Profitdons Liste) column "Besser":
+-- Geardon's verdict (GeardonAPI 2 UpgradePercent) against what you wear in that slot; Geardon's upgrade arrow before it.
+-- The variant's link: the one Buy.lua learned, else the item key's tooltip link (C_TooltipInfo.GetItemKey).
+---------------------------------------------------------------------------
+local function GearAPI()
+  local g = rawget(_G, "GeardonAPI")
+  if type(g) == "table" and (tonumber(g.version) or 0) >= 2 and type(g.UpgradePercent) == "function" then return g end
+end
+ns.AHGearAPI = GearAPI
+local gearLinks = {}
+local function GearLink(r)
+  local link = ns.KeyLink and ns.KeyLink(r.itemKey)
+  if link then return link end
+  local k = r.itemKey
+  if type(k) ~= "table" then return r.id and ("item:" .. r.id) or nil end
+  local key = tostring(k.itemID) .. ":" .. tostring(k.itemLevel or 0) .. ":" .. tostring(k.itemSuffix or 0)
+  if gearLinks[key] then return gearLinks[key] end
+  local tip = C_TooltipInfo and C_TooltipInfo.GetItemKey
+  local ok, data = false, nil
+  if type(tip) == "function" then ok, data = pcall(tip, k.itemID, k.itemLevel or 0, k.itemSuffix or 0) end
+  link = ok and type(data) == "table" and type(data.hyperlink) == "string" and data.hyperlink or nil
+  if link then gearLinks[key] = link return link end
+  return "item:" .. tostring(k.itemID)
+end
+local ARROW = "|A:bags-greenarrow:12:12|a"
+-- text, colour and sort value of the column for a result (nil text: not gear)
+function ns.AHGearCell(r)
+  local g = GearAPI()
+  if not g then return nil end
+  local ok, pct, up, uncertain, wearable, empty, soon = pcall(g.UpgradePercent, GearLink(r))
+  if not ok or (pct == nil and up == nil) then return nil end
+  local arrow = (wearable and up) and ARROW or ""
+  if not wearable then
+    return pct and ("%+d%%"):format(pct) or "", C.muted, -1e6 + (pct or 0)
+  elseif empty then
+    return arrow .. "leer", C.green, 1e6
+  elseif pct then
+    return arrow .. ("%+d%%"):format(pct), pct > 0 and C.green or pct < 0 and C.red or C.body, pct
+  end
+  return arrow, C.body, up and 0 or -1
+end
 
 ---------------------------------------------------------------------------
 -- Median and trend text (History.lua)
@@ -745,14 +791,16 @@ local function ResultItems()
     r.med = nil
     if H then r.med, _, tt, col, dir, pct = H.Info(r.id) end
     r.pct = pct
+    local gearText, gearColor, gearSort = ns.AHGearCell(r)
+    r.gear = gearSort
     local sub = {}
     if r.own then sub[#sub + 1] = "mit eigenem Angebot" end
     if info and info.isCommodity == false then sub[#sub + 1] = "Einzelauktionen" end
     -- (Daniel 21.11.2026) the tooltip of this variant with its suffix stats: its link once searched, else the item key
     items[#items + 1] = { kind = "trow", title = r.name, quality = r.quality, itemID = r.id, itemKey = r.itemKey, itemLink = ns.KeyLink and ns.KeyLink(r.itemKey) or nil,
       icon = ns.Icon(r.id), sub = table.concat(sub, ", "),
-      cells = { lvl = r.lvl and r.lvl > 0 and tostring(r.lvl) or "", skill = r.skill and tostring(r.skill) or "", qty = r.qty and tostring(r.qty) or "", price = M(r.min), med = M(r.med), trend = tt },
-      cellColors = { trend = TrendColor(dir) },
+      cells = { lvl = r.lvl and r.lvl > 0 and tostring(r.lvl) or "", skill = r.skill and tostring(r.skill) or "", qty = r.qty and tostring(r.qty) or "", price = M(r.min), med = M(r.med), trend = tt, gear = gearText or "" },
+      cellColors = { trend = TrendColor(dir), gear = gearColor },
       active = (A.sel == r and B.kind == "ah") or nil, result = r }
     end
   end
@@ -780,6 +828,8 @@ local function Cols()
     { key = "price", title = "Preis ab", width = 96, sort = true },
     { key = "med", title = ("Median %d T"):format(n), width = 96, sort = true, minWidth = 470, fold = "Median" },
     { key = "trend", title = "Tendenz", width = 70, sort = true, minWidth = 420, fold = "Tendenz" },
+    -- (26.11.2026) Geardon's percent against your worn item (only with Geardon 1.8 or newer)
+    GearAPI() and { key = "gear", title = "Besser", width = 64, sort = true } or nil,
   }
 end
 ns.AHCols = Cols -- (tests)

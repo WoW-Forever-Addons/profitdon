@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.54
+- Kaufen: neue Spalte "Besser" für Ausrüstung. Sie zeigt, um wie viel Prozent ein Teil besser oder schlechter ist als das, was du in dem Platz trägst, mit dem grünen Upgrade-Pfeil davor; "leer", wenn der Platz frei ist; grau, was du nicht tragen kannst. Ein Klick auf den Kopf sortiert das beste Upgrade nach oben. Braucht Geardon ab Version 1.8.
+
 ## 0.2.53
 - Verkaufen: Alle Questgegenstände, die im AH gehandelt werden, stehen jetzt in der Liste, zum Beispiel die Seiten der Grünen Hügel des Schlingendorntals. Was keinen AH-Preis hat, bleibt draußen.
 
