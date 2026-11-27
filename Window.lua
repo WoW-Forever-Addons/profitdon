@@ -556,7 +556,9 @@ local function Rows()
     if st.below > 0 and not ns.db.craftAll then
       out[#out + 1] = { kind = "note", text = ("%d Rezepte unter dem Mindestgewinn (%s). \"Alle Rezepte\" zeigt sie."):format(st.below, ns.Money(ns.Opt("minProfit") or 0)) }
     end
-    if (st.data or 0) > 0 then out[#out + 1] = { kind = "note", text = ("%d Rezepte ohne Ergebnis oder Reagenzdaten (z. B. Verzauberungen)."):format(st.data) } end
+    if (st.data or 0) > 0 and Cr.DataMissing() then
+      out[#out + 1] = { kind = "note", top = true, color = C.yellow, text = ("Rezeptdaten nicht geladen (%d Rezepte fehlen): bitte /reload."):format(st.data) }
+    elseif (st.data or 0) > 0 then out[#out + 1] = { kind = "note", text = ("%d Rezepte ohne Ergebnis oder Reagenzdaten (z. B. Verzauberungen)."):format(st.data) } end
     if mode == "ah" and st.noAH > 0 then out[#out + 1] = { kind = "note", text = ("%d Rezepte ohne AH-Preis für das Ergebnis (nicht im Scan)."):format(st.noAH) } end
     return out
   end
@@ -618,7 +620,9 @@ local function Rows()
     if st.below > 0 and not ns.db.craftAll then
       out[#out + 1] = { kind = "note", text = ("%d Rezepte unter dem Mindestgewinn (%s). \"Alle Rezepte\" zeigt sie."):format(st.below, ns.Money(ns.Opt("minProfit") or 0)) }
     end
-    if (st.data or 0) > 0 then out[#out + 1] = { kind = "note", text = ("%d Rezepte ohne Reagenzdaten: einmal das Berufsfenster öffnen."):format(st.data) } end
+    if (st.data or 0) > 0 and Cr.DataMissing() then
+      out[#out + 1] = { kind = "note", top = true, color = C.yellow, text = ("Rezeptdaten nicht geladen (%d Rezepte fehlen): bitte /reload."):format(st.data) }
+    elseif (st.data or 0) > 0 then out[#out + 1] = { kind = "note", text = ("%d Rezepte ohne Reagenzdaten: einmal das Berufsfenster öffnen."):format(st.data) } end
     if mode == "ah" and (st.noAH or 0) > 0 then out[#out + 1] = { kind = "note", text = ("%d Rezepte ohne AH-Preis für das Ergebnis (nicht im Scan)."):format(st.noAH) } end
     if mode == "de" and st.noDE > 0 then out[#out + 1] = { kind = "note", text = ("%d Rezepte machen nichts Entzauberbares."):format(st.noDE) } end
     if view ~= "mine" and #rows > 0 then

@@ -732,6 +732,16 @@ local function WindowSoon()
   winPending = true
   ns.WhenIdle("Berufsfenster", function() winPending = nil ns.Job("Berufsfenster", Cr.ReadWindowSliced) end, 0.6)
 end
+-- (Daniel 27.11.2026, laptop BAPHOMET86: Herstellen showed one recipe and "95 Rezepte ohne Reagenzdaten", a /reload the
+-- day after fixed it) Data/Recipes.lua did not load in that session; only what the game's window kept (craftExtra)
+-- was left. Said plainly at login and in the lists instead of sending the player to the profession window.
+function Cr.DataMissing() return not (type(ns.CRAFTS) == "table" and next(ns.CRAFTS)) end
+ns.On("PLAYER_LOGIN", function()
+  if Cr.DataMissing() then
+    ns.Fact("recipeData", "Data/Recipes.lua nicht geladen")
+    ns.Print("Rezeptdaten nicht geladen. Bitte /reload, sonst fehlen fast alle Rezepte.")
+  end
+end)
 ns.On("PLAYER_LOGIN", function() ns.After(8, function() ns.Job("Rezepte lesen", function(p) Cr.Read(true, p) end) end) end)
 ns.On("SKILL_LINES_CHANGED", function() ns.After(2, function() ns.Job("Rezepte prüfen", function(p) Cr.Read(nil, p) end) end) end)
 ns.On("NEW_RECIPE_LEARNED", function() ns.After(1, function() ns.Job("Rezepte lesen", function(p) Cr.Read(true, p) end) end) end)

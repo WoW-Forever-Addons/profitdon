@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.55
+- Herstellen: Wurden die Rezeptdaten beim Start nicht geladen, sagt Profitdon das jetzt klar (Chat beim Login und gelbe Zeile in der Liste: "bitte /reload") statt "einmal das Berufsfenster öffnen".
+
 ## 0.2.54
 - Kaufen: neue Spalte "Besser" für Ausrüstung. Sie zeigt, um wie viel Prozent ein Teil besser oder schlechter ist als das, was du in dem Platz trägst, mit dem grünen Upgrade-Pfeil davor; "leer", wenn der Platz frei ist; grau, was du nicht tragen kannst. Ein Klick auf den Kopf sortiert das beste Upgrade nach oben. Braucht Geardon ab Version 1.8.
 
