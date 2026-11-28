@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.57
+- Herstellen, Berufe, Entzaubern: Solange eine Liste neu gerechnet wird (nach einem Vollscan, neuen Live-Angeboten oder Taschen), steht oben neben der Suche die gelbe Marke "Rechnet neu ...". Bis dahin zeigt die Liste den letzten Stand, danach sortiert sie sich neu.
+
 ## 0.2.56
 - Kaufen: Ausrüstung "of the ..." zeigt im Tooltip und in der Spalte "Besser" die Werte der Variante schon vor dem Anklicken (bisher nur Rüstung des Grundteils).
 

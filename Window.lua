@@ -512,13 +512,20 @@ local function KnownLead(v)
 end
 
 -- the rows of the list on screen
+-- (28.11.2026, Daniel: Skywall Souffle "zuerst nach dem scan ganz oben und dann auf einmal ... weiter unten", "mach das
+-- schön und klar nicht noch eine halbgraue zeile") true while a craft list is being worked out anew (Crafts.lua Soon:
+-- the old list or none is shown); the mark "Rechnet neu ..." over the list says so (Place)
+local listCalc = false
+ns.WindowListCalc = function() return listCalc end -- (tests)
 local function Rows()
   local out, B, Cr, DE = {}, ns.BuyState, ns.Crafts, ns.DE
+  listCalc = false
   local function sel(e) return (B.entry == e and KIND[tab] == B.kind) or (Cr.sel and e and Cr.sel.r == e.r and Cr.sel.mode == e.mode) end
   if PROF_MODE[tab] then
     local mode, prof = PROF_MODE[tab], Cr.ViewProf()
     if not prof then out[1] = { kind = "note", text = "Keine Rezeptdaten." } return out end
-    local rows, missing, st = Cr.ProfRowsSoon(prof, mode)
+    local rows, missing, st, calc = Cr.ProfRowsSoon(prof, mode)
+    listCalc = calc and true or false
     if not rows then calcNote = true out[1] = { kind = "note", text = "Rechne die Rezepte ..." } return out end
     local hidden
     rows, hidden = Found(rows)
@@ -566,8 +573,9 @@ local function Rows()
     local mode = CRAFT_MODE[tab]
     -- (Daniel 21.11.2026) Entzaubern > Herstellen: also every recipe of one or all professions, as in Berufe
     local view = tab == "demake" and Cr.DeView() or "mine"
-    local rows, missing, st
-    if view ~= "mine" then rows, missing, st = Cr.ProfRowsSoon(view, mode) else rows, missing, st = Cr.RowsSoon(mode) end
+    local rows, missing, st, calc
+    if view ~= "mine" then rows, missing, st, calc = Cr.ProfRowsSoon(view, mode) else rows, missing, st, calc = Cr.RowsSoon(mode) end
+    listCalc = calc and true or false
     if not rows then calcNote = true out[1] = { kind = "note", text = "Rechne die Rezepte ..." } return out end
     local hidden
     rows, hidden = Found(rows)
@@ -1660,6 +1668,7 @@ local function Place()
     { W.pscan, 110, (tab == "skill" or PROF_MODE[tab]) and true or false },
     { W.all, W.all.w, craftish },
     { W.search, 150, craftish },
+    { W.calc, W.calc:GetWidth(), craftish and listCalc },
     { W.sChar, 120, tab == "skill" },
     { W.sProf, 130, tab == "skill" },
     { W.pProf, 150, PROF_MODE[tab] and true or false },
@@ -2123,6 +2132,12 @@ local function BuildWith()
     -- (Daniel 18.11.2026) a head dragged onto another moves its column; a right click: the own order back
     onMove = function(from, to) ns.WindowMoveCol(tab, from, to) Draw() end })
   W.bar = UI.ActionBar(lp)
+  W.calc = UI.Pill(lp, "Rechnet neu ...", "warn")
+  W.calc:SetHeight(S.buttonSmall or W.calc:GetHeight())
+  W.calc:EnableMouse(true)
+  W.calc:SetScript("OnEnter", function(self) Kit.Tooltip(self, "Rechnet neu", { "Neue Preise (Vollscan, Live-Angebote) oder neue Taschen: die Liste wird neu gerechnet.",
+    "Bis dahin steht der letzte Stand da; ist die Rechnung fertig, sortiert sie sich neu und die Marke verschwindet." }) end)
+  W.calc:SetScript("OnLeave", function(self) Kit.HideTooltip(self) end)
   W.ahBlizz = UI.Button(lp, "Blizzard-AH", { small = true, onClick = function() ns.AHFrameToggle() end,
     tooltip = "Blizzard-AH", tooltipLines = { "Zeigt Blizzards Auktionsfenster für diesen Besuch, nochmal drücken: wieder weg.",
       "Ganz abschalten: Optionen, \"Blizzards Auktionsfenster verstecken\"." } })
