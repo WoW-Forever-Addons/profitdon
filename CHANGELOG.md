@@ -1,5 +1,8 @@
 # Profitdon
 
+## 0.2.56
+- Kaufen: Ausrüstung "of the ..." zeigt im Tooltip und in der Spalte "Besser" die Werte der Variante schon vor dem Anklicken (bisher nur Rüstung des Grundteils).
+
 ## 0.2.55
 - Herstellen: Wurden die Rezeptdaten beim Start nicht geladen, sagt Profitdon das jetzt klar (Chat beim Login und gelbe Zeile in der Liste: "bitte /reload") statt "einmal das Berufsfenster öffnen".
 

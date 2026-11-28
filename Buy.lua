@@ -264,7 +264,38 @@ ns.keyLinks = ns.keyLinks or {}
 local function KeyStr(key)
   return type(key) == "table" and ns.Num(key.itemID) and (ns.Num(key.itemID) .. ":" .. (ns.Num(key.itemSuffix) or 0)) or nil
 end
-function ns.KeyLink(key) local k = KeyStr(key) return k and ns.keyLinks[k] or nil end
+-- (28.11.2026, Daniel with a picture: Kaufen "Adventurer's Bandana of Shadow Protection" showed only 130 Armor before any
+-- search) until a search taught the link, a link built from the key: the suffix as Forever's bonus ID, else as field 7;
+-- taken only when the game's tooltip of that link has the variant's name (GetItemKeyInfo), so a wrong guess is never shown
+local guessed = {}
+local function TipName(link)
+  local get = C_TooltipInfo and C_TooltipInfo.GetHyperlink
+  if type(get) ~= "function" then return nil end
+  local ok, data = pcall(get, link)
+  local line = ok and type(data) == "table" and type(data.lines) == "table" and data.lines[1]
+  return type(line) == "table" and line.leftText or nil
+end
+local function GuessLink(key, k)
+  local g = guessed[k]
+  if g ~= nil then return g or nil end
+  local id, s = ns.Num(key.itemID), math.abs(ns.Num(key.itemSuffix) or 0)
+  if not id or s == 0 then return nil end
+  local info = ns.AH and ns.AH.GetItemKeyInfo and ns.Call(ns.AH.GetItemKeyInfo, key)
+  local name = type(info) == "table" and info.itemName
+  if type(name) ~= "string" or name == "" then return nil end -- not kept: the name comes later
+  for _, link in ipairs({ ("item:%d::::::::::::1:%d"):format(id, s), ("item:%d::::::%d"):format(id, s), ("item:%d::::::%d"):format(id, -s) }) do
+    local tn = TipName(link)
+    if tn == nil then return nil end -- the game does not know it yet: ask again next time
+    if tn == name then guessed[k] = link return link end
+  end
+  guessed[k] = false
+  return nil
+end
+function ns.KeyLink(key)
+  local k = KeyStr(key)
+  if not k then return nil end
+  return ns.keyLinks[k] or GuessLink(key, k)
+end
 
 local function PlanItem()
   local n = ns.Num(ns.Call(ns.AH.GetNumItemSearchResults, B.key)) or 0
